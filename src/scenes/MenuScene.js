@@ -157,6 +157,7 @@ export class MenuScene extends Phaser.Scene {
     tx(COL1, y, '── CONTROLS ──', '#ffd700', 11); y += 18;
     const controls = [
       ['WASD / Arrows', 'Move one tile'],
+      ['Space / click tile', 'Pick up / stairs / wait'],
       ['Bump enemy',    'Attack'],
       ['G',             'Pick up item'],
       ['. (period)',    'Wait a turn'],
@@ -168,7 +169,7 @@ export class MenuScene extends Phaser.Scene {
       ['M',             'Toggle minimap'],
       ['Click tile',    'Walk to location'],
       ['Click adj. foe','Attack (orthogonal)'],
-      ['Esc',           'Close panel'],
+      ['Esc',           'Close panel / Pause'],
     ];
     for (const [key, desc] of controls) {
       tx(COL1,      y, key,  '#ffdd88', 11);

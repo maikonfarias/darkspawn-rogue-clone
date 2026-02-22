@@ -30,9 +30,15 @@ export class UIScene extends Phaser.Scene {
     this.bus.on(EV.LOG_MSG,        (msg) => this._addLog(msg));
     this.bus.on(EV.FLOOR_CHANGED,  ({ floor }) => { this._refreshFloor(floor); this._updateMinimap(); });
     this.bus.on(EV.MINIMAP_UPDATE, () => this._updateMinimap());
+    this.bus.on(EV.PAUSE_GAME,     () => this._openPauseMenu());
+    this.bus.on(EV.RESUME_GAME,    () => this._closePauseMenu());
+    this.bus.on(EV.STATS_CHANGED,  () => this._refreshInventory());
 
     // Toggle minimap with M key
     this.input.keyboard.on('keydown-M', () => this._toggleMinimap());
+
+    this._refreshStats();
+    this._refreshInventory();
   }
 
   _buildHUD() {
@@ -87,8 +93,11 @@ export class UIScene extends Phaser.Scene {
     this.equipAmu = tx(8, 260, 'AMU: None',  '#cccccc', 11);
 
     // Controls hint
-    tx(8, 280, '[I]nv [K]ill [C]raft [P]', '#334455', 10);
-    tx(8, 292, 'WASD/Arrows  [M]inimap', '#334455', 10);
+    tx(8, 280, '[K]ills [C]raft [P]char [I]detail', '#334455', 10);
+    tx(8, 292, 'WASD/Arrows  [M]inimap  [Space]=act', '#334455', 10);
+
+    // ── Always-visible Inventory (below stats panel) ─────────
+    this._buildInvPanel(W, PX, PY + PH);
 
     // ── Minimap (top-left) ────────────────────────────────────
     this._buildMinimap();
@@ -107,6 +116,123 @@ export class UIScene extends Phaser.Scene {
       );
     }
     this.logMessages = [];
+
+    // ── Pause button (top-centre) ────────────────────────────
+    const pauseBtn = this.add.text(W / 2, 8, '[ ❚❚ PAUSE ]', {
+      fontFamily: 'Courier New', fontSize: '13px', color: '#88aacc',
+      backgroundColor: '#0d1117', padding: { x: 10, y: 5 },
+    }).setOrigin(0.5, 0).setScrollFactor(0).setInteractive({ useHandCursor: true }).setDepth(5);
+    pauseBtn.on('pointerover', () => pauseBtn.setColor('#ffd700'));
+    pauseBtn.on('pointerout',  () => pauseBtn.setColor('#88aacc'));
+    pauseBtn.on('pointerdown', () => this.bus.emit(EV.PAUSE_GAME));
+  }
+
+  // ── Always-visible Inventory Panel ───────────────────────────
+
+  _buildInvPanel(W, panelX, statsBottom) {
+    const PW    = 210;
+    const COLS  = 4;
+    const SZ    = 44;   // slot size
+    const GAP   = 2;
+    const ROWS  = 6;    // 4×6 = 24 slots
+    const INNER = COLS * SZ + (COLS - 1) * GAP;  // 182
+    const PADX  = Math.floor((PW - INNER) / 2);  // centre the grid
+    const PH    = 16 + 6 + ROWS * (SZ + GAP) - GAP + 8; // title + grid + padding
+    const IX    = panelX;          // same left edge as stats panel
+    const IY    = statsBottom + 6; // 6px gap below stats panel
+
+    // Background
+    this.add.rectangle(IX + PW / 2, IY + PH / 2, PW, PH, 0x0d1117, 0.88)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(4);
+
+    // Title
+    this.add.text(IX + PW / 2, IY + 4, '─ BAG ─', {
+      fontFamily: 'Courier New', fontSize: '11px', color: '#445566',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(4);
+
+    // Build slot grid
+    this._invSlots = [];
+    for (let i = 0; i < 24; i++) {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      const sx  = IX + PADX + col * (SZ + GAP);
+      const sy  = IY + 22 + row * (SZ + GAP);
+
+      const bg = this.add.rectangle(sx + SZ / 2, sy + SZ / 2, SZ, SZ, 0x111118, 1)
+        .setStrokeStyle(1, 0x223344).setScrollFactor(0).setDepth(4).setInteractive();
+
+      const icon = this.add.image(sx + SZ / 2, sy + SZ / 2 - 4, 'item-weapon')
+        .setDisplaySize(26, 26).setScrollFactor(0).setDepth(5).setVisible(false);
+
+      const qty = this.add.text(sx + SZ - 3, sy + SZ - 12, '', {
+        fontFamily: 'Courier New', fontSize: '9px', color: '#aaaacc',
+      }).setOrigin(1, 0).setScrollFactor(0).setDepth(5);
+
+      const slot = { bg, icon, qty, index: i, _selectedOnce: false };
+      this._invSlots.push(slot);
+
+      bg.on('pointerover', () => { if (slot._item) bg.setFillStyle(0x223344); });
+      bg.on('pointerout',  () => bg.setFillStyle(slot._item ? 0x1e2a3a : 0x111118));
+      bg.on('pointerdown', () => this._onInvSlotClick(slot));
+    }
+  }
+
+  _refreshInventory() {
+    if (!this._invSlots) return;
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player) return;
+    const inv = gs.player.inventory;
+
+    for (const slot of this._invSlots) {
+      const item = inv[slot.index];
+      slot._item = item;
+      slot._selectedOnce = false;
+
+      if (item) {
+        slot.bg.setFillStyle(0x1e2a3a).setStrokeStyle(1, 0x334466);
+        slot.icon.setTexture(`item-${item.type}`).setVisible(true);
+        slot.qty.setText(item.qty > 1 ? String(item.qty) : '');
+      } else {
+        slot.bg.setFillStyle(0x111118).setStrokeStyle(1, 0x223344);
+        slot.icon.setVisible(false);
+        slot.qty.setText('');
+      }
+    }
+  }
+
+  _onInvSlotClick(slot) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player) return;
+    if (gs.gamePaused || gs.activePanel !== 0) return; // PANEL.NONE = 0
+    const item = slot._item;
+    if (!item) return;
+
+    if (!slot._selectedOnce) {
+      // First click: show info
+      slot._selectedOnce = true;
+      slot.bg.setFillStyle(0x334466);
+      // Reset all other slots
+      for (const s of this._invSlots) {
+        if (s !== slot && s._selectedOnce) {
+          s._selectedOnce = false;
+          s.bg.setFillStyle(s._item ? 0x1e2a3a : 0x111118);
+        }
+      }
+      let info = `${item.name}`;
+      if (item.atk)      info += ` | ATK+${item.atk}`;
+      if (item.def)      info += ` | DEF+${item.def}`;
+      if (item.hpBonus)  info += ` | HP+${item.hpBonus}`;
+      if (item.effect?.heal) info += ` | Heal ${item.effect.heal}`;
+      info += ' — click again to use';
+      this.bus.emit(EV.LOG_MSG, { text: info, color: '#88aacc' });
+    } else {
+      // Second click: use / equip
+      slot._selectedOnce = false;
+      const result = gs.player.useItem(slot.index);
+      if (result?.scrollEffect) gs._applyScrollEffect(result.scrollEffect);
+      if (result) gs._endPlayerTurn?.();
+      this._refreshInventory();
+    }
   }
 
   // ── Minimap ─────────────────────────────────────────────
@@ -264,5 +390,193 @@ export class UIScene extends Phaser.Scene {
         this.logLines[i].setText('');
       }
     }
+  }
+
+  // ── Pause Menu ───────────────────────────────────────────
+
+  _openPauseMenu() {
+    if (this._pauseItems) return; // already open
+
+    const W = this.cameras.main.width;
+    const H = this.cameras.main.height;
+    const items = [];
+    const add = (o) => { items.push(o); return o; };
+
+    // Dark backdrop (blocks clicks on game below)
+    add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.65)
+      .setScrollFactor(0).setDepth(50).setInteractive());
+
+    // Panel box
+    const PW = 380, PH = 270;
+    add(this.add.rectangle(W / 2, H / 2, PW, PH, 0x0a0a14, 0.97)
+      .setScrollFactor(0).setDepth(51).setStrokeStyle(2, 0x334466));
+
+    add(this.add.text(W / 2, H / 2 - 108, '❚❚  PAUSED', {
+      fontFamily: 'Courier New', fontSize: '26px', color: '#ffd700',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(52));
+
+    const mkBtn = (label, y, color, cb) => {
+      const btn = add(this.add.text(W / 2, y, label, {
+        fontFamily: 'Courier New', fontSize: '18px', color,
+        backgroundColor: '#111122', padding: { x: 22, y: 9 },
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(52).setInteractive({ useHandCursor: true }));
+      btn.on('pointerover', () => btn.setAlpha(0.75));
+      btn.on('pointerout',  () => btn.setAlpha(1));
+      btn.on('pointerdown', cb);
+      return btn;
+    };
+
+    mkBtn('[ CONTINUE ]',    H / 2 - 20, '#44ff88', () => this.bus.emit(EV.RESUME_GAME));
+    mkBtn('[ HOW TO PLAY ]', H / 2 + 40, '#88aaff', () => this._showInstructions());
+    mkBtn('[ MAIN MENU ]',   H / 2 + 100, '#ff8888', () => {
+      this.bus.emit(EV.RESUME_GAME);
+      this.scene.stop(SCENE.UI);
+      this.scene.stop(SCENE.GAME);
+      this.scene.start(SCENE.MENU);
+    });
+
+    // Escape key resumes
+    this._pauseEscHandler = () => this.bus.emit(EV.RESUME_GAME);
+    this.input.keyboard.on('keydown-ESC', this._pauseEscHandler);
+
+    this._pauseItems = items;
+  }
+
+  _closePauseMenu() {
+    if (!this._pauseItems) return;
+    for (const o of this._pauseItems) o.destroy();
+    this._pauseItems = null;
+    if (this._pauseEscHandler) {
+      this.input.keyboard.off('keydown-ESC', this._pauseEscHandler);
+      this._pauseEscHandler = null;
+    }
+  }
+
+  _showInstructions() {
+    const W = this.cameras.main.width;
+    const H = this.cameras.main.height;
+    const items = [];
+    const add = (o) => { items.push(o); return o; };
+
+    // Overlay on top of pause menu
+    add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.55)
+      .setScrollFactor(0).setDepth(60).setInteractive());
+
+    const PW = 860, PH = 640;
+    const PX = W / 2 - PW / 2;
+    const PY = H / 2 - PH / 2;
+    add(this.add.rectangle(W / 2, H / 2, PW, PH, 0x090910, 0.98)
+      .setScrollFactor(0).setDepth(61).setStrokeStyle(2, 0x334466));
+
+    const tx = (x, y, str, color = '#ccddee', size = 12) =>
+      add(this.add.text(PX + x, PY + y, str, {
+        fontFamily: 'Courier New', fontSize: `${size}px`, color,
+      }).setScrollFactor(0).setDepth(62));
+
+    const icon = (x, y, key) => {
+      try {
+        add(this.add.image(PX + x, PY + y, key).setDisplaySize(18, 18).setOrigin(0, 0).setScrollFactor(0).setDepth(62));
+      } catch (_) {}
+    };
+
+    tx(PW / 2, 12, '⚔  HOW TO PLAY  ⚔', '#ffd700', 18).setOrigin(0.5, 0);
+    tx(PW / 2, 36, 'Delve 10 floors deep and slay the Dungeon Lord', '#88aacc', 12).setOrigin(0.5, 0);
+
+    const COL1 = 14, COL2 = PW / 2 + 8;
+    let y = 66;
+
+    // Left column — controls
+    tx(COL1, y, '── CONTROLS ──', '#ffd700', 11); y += 18;
+    const controls = [
+      ['WASD / Arrows',   'Move one tile'],
+      ['Space / click tile', 'Pick up / stairs / wait'],
+      ['Bump enemy',      'Attack'],
+      ['G',               'Pick up item'],
+      ['. (period)',      'Wait a turn'],
+      ['> / <',           'Use stairs down/up'],
+      ['I',               'Inventory'],
+      ['K',               'Skill tree'],
+      ['C',               'Crafting'],
+      ['P',               'Character screen'],
+      ['M',               'Toggle minimap'],
+      ['Click tile',      'Walk to location'],
+      ['Click adj. foe',  'Attack (orthogonal)'],
+      ['Escape',          'Pause menu (anywhere)'],
+    ];
+    for (const [key, desc] of controls) {
+      tx(COL1,       y, key,  '#ffdd88', 11);
+      tx(COL1 + 118, y, desc, '#99aabb', 11);
+      y += 16;
+    }
+
+    y += 6;
+    tx(COL1, y, '── COMBAT TIPS ──', '#ffd700', 11); y += 18;
+    const tips = [
+      'HP drops to 0 → you die.',
+      'Potions restore HP / MP.',
+      'Equipment raises ATK, DEF.',
+      'Skills cost skill points (level up).',
+      'Poison = damage each turn.',
+      'Freeze = skip turns.',
+      'Gold is auto-collected by walking over it.',
+    ];
+    for (const tip of tips) {
+      tx(COL1, y, '• ' + tip, '#778899', 11);
+      y += 15;
+    }
+
+    // Right column — legends
+    let ry = 66;
+    tx(COL2, ry, '── TILE LEGEND ──', '#ffd700', 11); ry += 18;
+    const tiles = [
+      ['tile-floor',        'Floor — safe to walk'],
+      ['tile-wall',         'Wall — impassable'],
+      ['tile-door',         'Door — opens on entry'],
+      ['tile-stairs-down',  'Stairs ↓  — descend (>)'],
+      ['tile-stairs-up',    'Stairs ↑  — ascend  (<)'],
+      ['tile-water',        'Water — slows movement'],
+      ['tile-lava',         'Lava — deals damage'],
+      ['tile-chest-closed', 'Chest — contains loot'],
+      ['tile-chest-open',   'Chest — already looted'],
+    ];
+    for (const [key, desc] of tiles) {
+      icon(COL2, ry, key);
+      tx(COL2 + 24, ry + 3, desc, '#99aabb', 11);
+      ry += 20;
+    }
+    const trapDot = add(this.add.rectangle(PX + COL2 + 9, PY + ry + 9, 18, 18, 0xff4444, 0.7).setScrollFactor(0).setDepth(62));
+    tx(COL2 + 24, ry + 3, 'Trap — watch your step!', '#99aabb', 11);
+    ry += 24;
+
+    tx(COL2, ry, '── ITEM TYPES ──', '#ffd700', 11); ry += 18;
+    const itemTypes = [
+      ['item-weapon',   'Weapon  — equip for ATK'],
+      ['item-armor',    'Armor   — equip for DEF'],
+      ['item-ring',     'Ring    — equip for bonus'],
+      ['item-amulet',   'Amulet  — equip for bonus'],
+      ['item-potion',   'Potion  — consumable'],
+      ['item-scroll',   'Scroll  — magical effect'],
+      ['item-material', 'Material — used in crafting'],
+      ['item-gold',     'Gold    — auto-collected'],
+    ];
+    for (const [key, desc] of itemTypes) {
+      icon(COL2, ry, key);
+      tx(COL2 + 24, ry + 3, desc, '#99aabb', 11);
+      ry += 20;
+    }
+
+    // Close button
+    const closeBtn = add(this.add.text(PW / 2 + PX, PY + PH - 30, '[ BACK TO PAUSE MENU ]', {
+      fontFamily: 'Courier New', fontSize: '13px', color: '#88aacc',
+      backgroundColor: '#111122', padding: { x: 14, y: 6 },
+    }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(62).setInteractive({ useHandCursor: true }));
+    closeBtn.on('pointerover', () => closeBtn.setColor('#ffd700'));
+    closeBtn.on('pointerout',  () => closeBtn.setColor('#88aacc'));
+    const close = () => { for (const o of items) o.destroy(); };
+    closeBtn.on('pointerdown', close);
+    this.time.delayedCall(0, () => {
+      this.input.keyboard.once('keydown-ESC', close);
+    });
   }
 }

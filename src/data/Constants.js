@@ -82,6 +82,8 @@ export const EV = Object.freeze({
   OPEN_CHAR:       'openChar',
   CLOSE_PANEL:     'closePanel',
   MINIMAP_UPDATE:  'minimapUpdate',
+  PAUSE_GAME:      'pauseGame',
+  RESUME_GAME:     'resumeGame',
 });
 
 // ── Dungeon Config ───────────────────────────────────────────

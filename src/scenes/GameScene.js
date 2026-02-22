@@ -43,6 +43,10 @@ export class GameScene extends Phaser.Scene {
     this.pendingSkillEffect = null;
     this.targeting = false;
     this.targetCallback = null;
+    this.gamePaused = false;
+    this.floorCache = new Map(); // stores saved floor state keyed by floor number
+    this._floorStartPos = null;
+    this._floorEndPos   = null;
     this._clickPath      = [];
     this._clickWalkTimer = null;
 
@@ -50,12 +54,14 @@ export class GameScene extends Phaser.Scene {
     this._loadFloor(this.floor);
 
     // Listen for events from UIScene
-    this.events_bus.on(EV.PLAYER_DIED, () => this._onDeath());
-    this.events_bus.on(EV.PLAYER_WIN,  () => this._onVictory());
+    this.events_bus.on(EV.PLAYER_DIED,  () => this._onDeath());
+    this.events_bus.on(EV.PLAYER_WIN,   () => this._onVictory());
+    this.events_bus.on(EV.PAUSE_GAME,   () => { this.gamePaused = true; });
+    this.events_bus.on(EV.RESUME_GAME,  () => { this.gamePaused = false; });
   }
 
   update() {
-    if (this.activePanel !== PANEL.NONE || this.targeting) return;
+    if (this.activePanel !== PANEL.NONE || this.targeting || this.gamePaused) return;
 
     const now = Date.now();
     for (const [code, pressTime] of Object.entries(this.heldKeys)) {
@@ -72,7 +78,7 @@ export class GameScene extends Phaser.Scene {
 
   // ── Floor Loading ────────────────────────────────────────
 
-  _loadFloor(floorNum) {
+  _loadFloor(floorNum, fromBelow = false) {
     // Clear previous floor
     if (this.tileLayer)    this.tileLayer.destroy();
     if (this.itemLayer)    this.itemLayer.destroy();
@@ -84,23 +90,39 @@ export class GameScene extends Phaser.Scene {
 
     this.activePanel = PANEL.NONE;
 
-    // Generate dungeon
-    const dungeon = generateDungeon(floorNum);
-    this.grid = dungeon.grid;
-    this.rooms = dungeon.rooms;
-    this.vis   = createVisGrid();
-
-    // Place player
-    this.player.x = dungeon.startPos.x;
-    this.player.y = dungeon.startPos.y;
-
-    // Spawn monsters
-    this.monsters = [];
-    this._spawnMonsters(dungeon, floorNum);
-
-    // Spawn items on map (not in inventory)
-    this.floorItems = []; // [{ x, y, item }]
-    this._spawnItems(dungeon, floorNum);
+    // ── Restore cached floor or generate fresh ──────────────
+    const cached = this.floorCache.get(floorNum);
+    if (cached) {
+      this.grid           = cached.grid;
+      this.rooms          = cached.rooms;
+      this.vis            = cached.vis;
+      this.monsters       = cached.monsters;
+      this.floorItems     = cached.floorItems;
+      this._floorStartPos = cached.startPos;
+      this._floorEndPos   = cached.endPos;
+      // Place player at the stair they came through
+      const pos = fromBelow ? cached.endPos : cached.startPos;
+      this.player.x = pos.x;
+      this.player.y = pos.y;
+    } else {
+      // Generate dungeon
+      const dungeon = generateDungeon(floorNum);
+      this.grid           = dungeon.grid;
+      this.rooms          = dungeon.rooms;
+      this.vis            = createVisGrid();
+      this._floorStartPos = dungeon.startPos;
+      this._floorEndPos   = dungeon.endPos;
+      // Place player at the stair they came through
+      const pos = fromBelow ? dungeon.endPos : dungeon.startPos;
+      this.player.x = pos.x;
+      this.player.y = pos.y;
+      // Spawn monsters
+      this.monsters = [];
+      this._spawnMonsters(dungeon, floorNum);
+      // Spawn items on map (not in inventory)
+      this.floorItems = []; // [{ x, y, item }]
+      this._spawnItems(dungeon, floorNum);
+    }
 
     // Build tile visuals
     this._buildTileLayer();
@@ -124,9 +146,11 @@ export class GameScene extends Phaser.Scene {
     this.events_bus.emit(EV.FLOOR_CHANGED, { floor: floorNum });
     this.events_bus.emit(EV.STATS_CHANGED);
     this.events_bus.emit(EV.LOG_MSG, {
-      text: floorNum === 1
+      text: floorNum === 1 && !cached
         ? `Welcome to the dungeon! Find the stairs (>) to descend.`
-        : `Floor ${floorNum}. The air grows colder...`,
+        : cached
+          ? `You return to floor ${floorNum}.`
+          : `Floor ${floorNum}. The air grows colder...`,
       color: '#88aacc'
     });
 
@@ -414,8 +438,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   _onKeyDown(event) {
+    if (this.gamePaused) return;
+
+    // Escape always opens pause menu (closing any open panel/targeting first)
+    if (event.code === 'Escape') {
+      if (this.activePanel !== PANEL.NONE) this._closePanel();
+      if (this.targeting) { this.targeting = false; }
+      this.events_bus.emit(EV.PAUSE_GAME);
+      return;
+    }
+
     if (this.activePanel !== PANEL.NONE) {
-      if (event.code === 'Escape' || event.code === 'KeyI' ||
+      if (event.code === 'KeyI' ||
           event.code === 'KeyK' || event.code === 'KeyC' || event.code === 'KeyP') {
         this._closePanel();
       }
@@ -423,7 +457,6 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.targeting) {
-      if (event.code === 'Escape') { this.targeting = false; return; }
       return; // mouse handles target selection
     }
 
@@ -439,14 +472,15 @@ export class GameScene extends Phaser.Scene {
 
     // Actions
     switch (code) {
+      case 'Space':  this._playerDefaultAction(); break;
       case 'KeyG':  this._playerPickUp(); break;
       case 'Period': this._endPlayerTurn(); break; // wait
       case 'Greater': case 'Period': break; // handled by _playerDescend
       case 'KeyI': this._openPanel(PANEL.INVENTORY); break;
       case 'KeyK': this._openPanel(PANEL.SKILLS);    break;
       case 'KeyC': this._openPanel(PANEL.CRAFTING);  break;
-      case 'KeyP': this._openPanel(PANEL.CHAR);      break;
-      case 'Escape': this._closePanel();              break;
+      case 'KeyP': this._openPanel(PANEL.CHAR);                    break;
+      case 'Escape': this.events_bus.emit(EV.PAUSE_GAME);            break;
     }
 
     // Stairs
@@ -457,6 +491,13 @@ export class GameScene extends Phaser.Scene {
   // ── Player Actions ───────────────────────────────────────
 
   _playerMove(dx, dy) {
+    // Diagonal = 2 orthogonal turns (horizontal first, then vertical)
+    if (dx !== 0 && dy !== 0) {
+      this._playerMove(dx, 0);
+      if (!this.player.isDead) this._playerMove(0, dy);
+      return;
+    }
+
     const nx = this.player.x + dx;
     const ny = this.player.y + dy;
 
@@ -501,13 +542,13 @@ export class GameScene extends Phaser.Scene {
     this.player.x = nx;
     this.player.y = ny;
 
-    // Auto-pickup gold
-    const goldPiles = this.floorItems.filter(f => f.x === nx && f.y === ny && f.item.type === ITEM_TYPE.GOLD);
-    for (const fi of goldPiles) {
+    // Auto-pickup all items on this tile
+    const itemsHere = this.floorItems.filter(f => f.x === nx && f.y === ny);
+    for (const fi of itemsHere) {
       this.player.pickUpItem(fi.item);
       this.floorItems.splice(this.floorItems.indexOf(fi), 1);
     }
-    if (goldPiles.length > 0) this._rebuildItemSprites();
+    if (itemsHere.length > 0) this._rebuildItemSprites();
 
     this._endPlayerTurn();
   }
@@ -567,6 +608,27 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Space / click-own-tile: pick up item → use stairs → wait */
+  _playerDefaultAction() {
+    const px = this.player.x, py = this.player.y;
+
+    // 1. Pick up an item here (non-gold gets priority; gold is auto-collected on walk)
+    const fi = this.floorItems.find(f => f.x === px && f.y === py);
+    if (fi) {
+      this._playerPickUp();
+      return;
+    }
+
+    // 2. Use stairs
+    const tile = this.grid[py][px];
+    if (tile === TILE.STAIRS_DOWN) { this._playerDescend(); return; }
+    if (tile === TILE.STAIRS_UP)   { this._playerAscend();  return; }
+
+    // 3. Wait a turn
+    this.events_bus.emit(EV.LOG_MSG, { text: 'You wait.', color: '#556677' });
+    this._endPlayerTurn();
+  }
+
   _playerPickUp() {
     const fi = this.floorItems.find(f => f.x === this.player.x && f.y === this.player.y);
     if (!fi) {
@@ -579,6 +641,19 @@ export class GameScene extends Phaser.Scene {
     this._endPlayerTurn();
   }
 
+  _saveCurrentFloor() {
+    if (!this.grid) return;
+    this.floorCache.set(this.floor, {
+      grid:       this.grid,
+      rooms:      this.rooms,
+      vis:        this.vis,
+      monsters:   this.monsters.filter(m => !m.isDead),
+      floorItems: this.floorItems,
+      startPos:   this._floorStartPos,
+      endPos:     this._floorEndPos,
+    });
+  }
+
   _playerDescend() {
     if (this.grid[this.player.y][this.player.x] !== TILE.STAIRS_DOWN) {
       this.events_bus.emit(EV.LOG_MSG, { text: 'No stairs here.', color: '#556677' });
@@ -588,8 +663,9 @@ export class GameScene extends Phaser.Scene {
       this.events_bus.emit(EV.LOG_MSG, { text: 'This is the deepest floor.', color: '#556677' });
       return;
     }
+    this._saveCurrentFloor();
     this.floor++;
-    this._loadFloor(this.floor);
+    this._loadFloor(this.floor, false);
   }
 
   _playerAscend() {
@@ -601,8 +677,9 @@ export class GameScene extends Phaser.Scene {
       this.events_bus.emit(EV.LOG_MSG, { text: 'You are already on the first floor.', color: '#556677' });
       return;
     }
+    this._saveCurrentFloor();
     this.floor--;
-    this._loadFloor(this.floor);
+    this._loadFloor(this.floor, true);
   }
 
   _openChest(x, y) {
@@ -744,9 +821,15 @@ export class GameScene extends Phaser.Scene {
     const dx = tx - this.player.x;
     const dy = ty - this.player.y;
 
-    // Orthogonally adjacent monster → attack directly, same as arrow-key bump
+    // Clicking own tile → default context action
+    if (dx === 0 && dy === 0) {
+      this._playerDefaultAction();
+      return;
+    }
+
+    // Adjacent monster (any of 8 directions) → attack directly
     const adjMonster = this.monsters.find(m => !m.isDead && m.x === tx && m.y === ty);
-    if (adjMonster && Math.abs(dx) + Math.abs(dy) === 1) {
+    if (adjMonster && Math.abs(dx) <= 1 && Math.abs(dy) <= 1) {
       this._playerAttack(adjMonster);
       this._endPlayerTurn();
       return;
@@ -785,16 +868,17 @@ export class GameScene extends Phaser.Scene {
   _stepClickWalk() {
     if (!this._clickPath.length) { this._cancelClickWalk(); return; }
 
-    // Cancel if a visible monster is adjacent (let player react)
-    const enemyClose = this.monsters.some(m =>
+    // Cancel only if the next step is occupied by a visible monster —
+    // _playerMove will then attack it instead of continuing the walk.
+    const next = this._clickPath[0];
+    const blockedByMonster = this.monsters.some(m =>
       !m.isDead &&
       this.vis[m.y]?.[m.x] === VIS.VISIBLE &&
-      Math.abs(m.x - this.player.x) <= 1 &&
-      Math.abs(m.y - this.player.y) <= 1
+      m.x === next.x && m.y === next.y
     );
-    if (enemyClose) { this._cancelClickWalk(); return; }
+    if (blockedByMonster) { this._cancelClickWalk(); return; }
 
-    const next = this._clickPath.shift();
+    this._clickPath.shift();
     this._drawPathPreview();
 
     const dx = next.x - this.player.x;

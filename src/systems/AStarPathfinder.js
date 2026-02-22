@@ -5,7 +5,9 @@ import { MAP_W, MAP_H } from '../data/Constants.js';
 import { isPassable } from './DungeonGenerator.js';
 
 function heuristic(ax, ay, bx, by) {
-  return Math.abs(ax - bx) + Math.abs(ay - by); // Manhattan
+  // Chebyshev distance scaled to match cost units (ortho=10, diag=14)
+  const dx = Math.abs(ax - bx), dy = Math.abs(ay - by);
+  return 10 * Math.max(dx, dy) + 4 * Math.min(dx, dy);
 }
 
 function idx(x, y) { return y * MAP_W + x; }
@@ -59,22 +61,28 @@ export function findPath(grid, sx, sy, ex, ey, occupied = new Set(), maxDist = 3
 
     openSet.delete(current);
 
-    // 4-directional neighbours
+    // 8-directional neighbours (orthogonal cost 10, diagonal cost 14)
     const neighbours = [
-      { x: cx, y: cy - 1 }, { x: cx, y: cy + 1 },
-      { x: cx - 1, y: cy }, { x: cx + 1, y: cy },
+      { x: cx,     y: cy - 1, cost: 10 }, { x: cx,     y: cy + 1, cost: 10 },
+      { x: cx - 1, y: cy,     cost: 10 }, { x: cx + 1, y: cy,     cost: 10 },
+      { x: cx - 1, y: cy - 1, cost: 14 }, { x: cx + 1, y: cy - 1, cost: 14 },
+      { x: cx - 1, y: cy + 1, cost: 14 }, { x: cx + 1, y: cy + 1, cost: 14 },
     ];
 
-    for (const { x: nx, y: ny } of neighbours) {
+    for (const { x: nx, y: ny, cost } of neighbours) {
       if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
       // Target tile is always passable (to allow reaching it)
       if (nx !== ex || ny !== ey) {
         if (!isPassable(grid, nx, ny)) continue;
         if (occupied.has(`${nx},${ny}`)) continue;
+        // Prevent diagonal corner-cutting through walls
+        if (cost === 14) {
+          if (!isPassable(grid, nx, cy) || !isPassable(grid, cx, ny)) continue;
+        }
       }
 
       const nIdx = idx(nx, ny);
-      const tentativeG = (gScore.get(current) ?? Infinity) + 1;
+      const tentativeG = (gScore.get(current) ?? Infinity) + cost;
 
       if (tentativeG < (gScore.get(nIdx) ?? Infinity)) {
         cameFrom.set(nIdx, current);
