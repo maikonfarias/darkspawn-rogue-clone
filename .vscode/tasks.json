@@ -1,0 +1,11 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Preview Build",
+			"type": "shell",
+			"command": "npx vite preview --port 4173",
+			"isBackground": true
+		}
+	]
+}
