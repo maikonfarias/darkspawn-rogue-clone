@@ -14,6 +14,7 @@ import { unlockSkill, useSkill } from '../systems/SkillSystem.js';
 import { craftItem, getAvailableRecipes } from '../systems/CraftingSystem.js';
 import { TILE_TEXTURE } from '../utils/TextureGenerator.js';
 import { rand, chance, pick, weightedPick } from '../utils/Random.js';
+import { findPath } from '../systems/AStarPathfinder.js';
 import { SKILL_TREES, SKILL_BY_ID } from '../data/SkillData.js';
 import { RECIPES } from '../data/RecipeData.js';
 
@@ -42,6 +43,8 @@ export class GameScene extends Phaser.Scene {
     this.pendingSkillEffect = null;
     this.targeting = false;
     this.targetCallback = null;
+    this._clickPath      = [];
+    this._clickWalkTimer = null;
 
     this._setupInput();
     this._loadFloor(this.floor);
@@ -64,6 +67,8 @@ export class GameScene extends Phaser.Scene {
     if (this.entityLayer)  this.entityLayer.destroy();
     if (this.fogLayer)     this.fogLayer.destroy();
     if (this.overlayPanel) this.overlayPanel.destroy();
+    if (this._pathGraphics) { this._pathGraphics.destroy(); this._pathGraphics = null; }
+    this._cancelClickWalk();
 
     this.activePanel = PANEL.NONE;
 
@@ -93,7 +98,13 @@ export class GameScene extends Phaser.Scene {
     this._updateFOV();
 
     // Camera follow player
-    this.cameras.main.setBounds(0, 0, MAP_W * T, MAP_H * T);
+    // Camera follow player — extend bounds by half the viewport on every side
+    // so the camera can always keep the player perfectly centred even at map edges
+    const camW = this.cameras.main.width;
+    const camH = this.cameras.main.height;
+    const hW   = Math.ceil(camW / 2);
+    const hH   = Math.ceil(camH / 2);
+    this.cameras.main.setBounds(-hW, -hH, MAP_W * T + hW * 2, MAP_H * T + hH * 2);
     this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
     this.cameras.main.setZoom(1);
 
@@ -265,6 +276,7 @@ export class GameScene extends Phaser.Scene {
   _updateFOV() {
     computeFOV(this.grid, this.vis, this.player.x, this.player.y, DUNGEON_CFG.FOV_RADIUS);
     this._render();
+    this.events_bus.emit(EV.MINIMAP_UPDATE);
   }
 
   _render() {
@@ -368,10 +380,11 @@ export class GameScene extends Phaser.Scene {
     this.heldKeys = {};
     this.lastMoveTime = 0;
 
-    kb.on('keydown', (event) => this._onKeyDown(event));
+    kb.on('keydown', (event) => { this._cancelClickWalk(); this._onKeyDown(event); });
     kb.on('keyup',   (event) => { delete this.heldKeys[event.code]; });
 
     this.input.on('pointerdown', (ptr) => this._onPointerDown(ptr));
+    this.input.on('pointerdown', (ptr) => { if (ptr.rightButtonDown()) this._cancelClickWalk(); });
   }
 
   _onKeyDown(event) {
@@ -604,8 +617,18 @@ export class GameScene extends Phaser.Scene {
     for (const m of this.monsters) {
       if (!m.isDead) m.update(ctx);
     }
-    // Remove dead monsters
-    this.monsters = this.monsters.filter(m => !m.isDead);
+    // Remove dead monsters and destroy their sprites
+    this.monsters = this.monsters.filter(m => {
+      if (!m.isDead) return true;
+      const entry = this.monsterSprites.get(m);
+      if (entry) {
+        entry.spr.destroy();
+        entry.hpBg.destroy();
+        entry.hpFill.destroy();
+        this.monsterSprites.delete(m);
+      }
+      return false;
+    });
   }
 
   _endPlayerTurn() {
@@ -681,8 +704,105 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // ── Click-to-walk ─────────────────────────────────────────
+
+  _cancelClickWalk() {
+    if (this._clickWalkTimer) { this._clickWalkTimer.remove(false); this._clickWalkTimer = null; }
+    this._clickPath = [];
+    if (this._pathGraphics) { this._pathGraphics.clear(); }
+  }
+
+  _startClickWalk(tx, ty) {
+    this._cancelClickWalk();
+
+    const dx = tx - this.player.x;
+    const dy = ty - this.player.y;
+
+    // Orthogonally adjacent monster → attack directly, same as arrow-key bump
+    const adjMonster = this.monsters.find(m => !m.isDead && m.x === tx && m.y === ty);
+    if (adjMonster && Math.abs(dx) + Math.abs(dy) === 1) {
+      this._playerAttack(adjMonster);
+      this._endPlayerTurn();
+      return;
+    }
+
+    // Build occupied set from living monsters (so path avoids them unless target)
+    const occupied = new Set(
+      this.monsters.filter(m => !m.isDead).map(m => `${m.x},${m.y}`)
+    );
+
+    // If clicking on a monster tile, remove it from occupied so we path to it
+    occupied.delete(`${tx},${ty}`);
+
+    const path = findPath(this.grid, this.player.x, this.player.y, tx, ty, occupied, 60);
+    if (!path.length) {
+      this.events_bus.emit(EV.LOG_MSG, { text: 'No path found.', color: '#556677' });
+      return;
+    }
+
+    this._clickPath = path;
+    this._drawPathPreview();
+    this._stepClickWalk();
+  }
+
+  _drawPathPreview() {
+    if (!this._pathGraphics) {
+      this._pathGraphics = this.add.graphics().setDepth(15);
+    }
+    this._pathGraphics.clear();
+    this._pathGraphics.fillStyle(0x88ddff, 0.35);
+    for (const step of this._clickPath) {
+      this._pathGraphics.fillRect(step.x * T + 4, step.y * T + 4, T - 8, T - 8);
+    }
+  }
+
+  _stepClickWalk() {
+    if (!this._clickPath.length) { this._cancelClickWalk(); return; }
+
+    // Cancel if a visible monster is adjacent (let player react)
+    const enemyClose = this.monsters.some(m =>
+      !m.isDead &&
+      this.vis[m.y]?.[m.x] === VIS.VISIBLE &&
+      Math.abs(m.x - this.player.x) <= 1 &&
+      Math.abs(m.y - this.player.y) <= 1
+    );
+    if (enemyClose) { this._cancelClickWalk(); return; }
+
+    const next = this._clickPath.shift();
+    this._drawPathPreview();
+
+    const dx = next.x - this.player.x;
+    const dy = next.y - this.player.y;
+    this._playerMove(dx, dy);
+
+    // If more steps remain, schedule the next one
+    if (this._clickPath.length) {
+      this._clickWalkTimer = this.time.delayedCall(120, () => this._stepClickWalk());
+    } else {
+      this._cancelClickWalk();
+    }
+  }
+
   _onPointerDown(ptr) {
-    if (!this.targeting) return;
+    if (ptr.rightButtonDown()) return;
+    if (!this.targeting) {
+      // Click-to-walk: ignore clicks over UI panels
+      if (this.activePanel !== PANEL.NONE) return;
+
+      const wx = this.cameras.main.scrollX + ptr.x;
+      const wy = this.cameras.main.scrollY + ptr.y;
+      const tx = Math.floor(wx / T);
+      const ty = Math.floor(wy / T);
+
+      // Must be an explored tile
+      if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return;
+      if (this.vis[ty]?.[tx] === VIS.HIDDEN) return;
+
+      this._startClickWalk(tx, ty);
+      return;
+    }
+
+    // Targeting mode (skill aim): handle spell click
     const wx = this.cameras.main.scrollX + ptr.x;
     const wy = this.cameras.main.scrollY + ptr.y;
     const tx = Math.floor(wx / T), ty = Math.floor(wy / T);

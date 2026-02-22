@@ -119,46 +119,151 @@ export class MenuScene extends Phaser.Scene {
 
   _showHelp() {
     const { width: W, height: H } = this.cameras.main;
-    const panel = this.add.rectangle(W / 2, H / 2, 520, 380, 0x0d1117, 0.96)
+
+    // Dim overlay
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6);
+
+    // Panel
+    const PW = 700, PH = 610;
+    const PX = W / 2 - PW / 2, PY = H / 2 - PH / 2;
+    const panel = this.add.rectangle(W / 2, H / 2, PW, PH, 0x0a0a14, 0.98)
       .setStrokeStyle(2, 0x334466);
 
-    const helpText = [
-      '═══════════════  HOW TO PLAY  ═══════════════',
-      '',
-      'You are a hero delving into a cursed dungeon.',
-      'Reach floor 10 and defeat the Dungeon Lord!',
-      '',
-      '── MOVEMENT ──',
-      'WASD / Arrow keys to move. Bump enemies to attack.',
-      'Press > on stairs to descend, < to ascend.',
-      '',
-      '── ITEMS ──',
-      'Press G to pick up items. Press I for inventory.',
-      'Click items to use/equip them.',
-      '',
-      '── SKILLS ──',
-      'Press K to open the skill tree (after leveling up).',
-      'Three paths: Warrior, Rogue, and Mage.',
-      '',
-      '── CRAFTING ──',
-      'Press C to craft items from materials you find.',
-      '',
-      '══ PRESS ANY KEY TO CLOSE ══',
+    const created = [overlay, panel];
+
+    const tx = (x, y, str, color = '#ccddee', size = 12) => {
+      const t = this.add.text(PX + x, PY + y, str, {
+        fontFamily: 'Courier New', fontSize: `${size}px`, color,
+      });
+      created.push(t);
+      return t;
+    };
+
+    const icon = (x, y, key) => {
+      try {
+        const img = this.add.image(PX + x, PY + y, key).setDisplaySize(18, 18).setOrigin(0, 0);
+        created.push(img);
+      } catch (_) { /* texture might not exist in menu context */ }
+    };
+
+    // ── Title ──────────────────────────────────────────────
+    tx(PW / 2, 14, '⚔  HOW TO PLAY  ⚔', '#ffd700', 18).setOrigin(0.5, 0);
+    tx(PW / 2, 38, 'Delve 10 floors deep and slay the Dungeon Lord', '#88aacc', 12).setOrigin(0.5, 0);
+
+    const COL1 = 14, COL2 = PW / 2 + 8;
+    let y = 68;
+
+    // ─── Left column ────────────────────────────────────────
+    tx(COL1, y, '── CONTROLS ──', '#ffd700', 11); y += 18;
+    const controls = [
+      ['WASD / Arrows', 'Move one tile'],
+      ['Bump enemy',    'Attack'],
+      ['G',             'Pick up item'],
+      ['. (period)',    'Wait a turn'],
+      ['> / <',         'Use stairs'],
+      ['I',             'Inventory'],
+      ['K',             'Skill tree'],
+      ['C',             'Crafting'],
+      ['P',             'Character'],
+      ['M',             'Toggle minimap'],
+      ['Click tile',    'Walk to location'],
+      ['Click adj. foe','Attack (orthogonal)'],
+      ['Esc',           'Close panel'],
     ];
+    for (const [key, desc] of controls) {
+      tx(COL1,      y, key,  '#ffdd88', 11);
+      tx(COL1 + 112, y, desc, '#99aabb', 11);
+      y += 16;
+    }
 
-    const txt = this.add.text(W / 2, H / 2, helpText.join('\n'), {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '13px',
-      color: '#ccddee',
-      align: 'center',
-      lineSpacing: 4,
-    }).setOrigin(0.5);
+    y += 6;
+    tx(COL1, y, '── COMBAT TIPS ──', '#ffd700', 11); y += 18;
+    const tips = [
+      'HP drops to 0 → you die.',
+      'Potions restore HP / MP.',
+      'Equipment raises ATK, DEF.',
+      'Skills cost skill points (level up).',
+      'Poison = damage each turn.',
+      'Freeze = skip turns.',
+    ];
+    for (const tip of tips) {
+      tx(COL1, y, '• ' + tip, '#778899', 11);
+      y += 15;
+    }
 
-    this.input.keyboard.once('keydown', () => {
-      panel.destroy(); txt.destroy();
-    });
-    this.input.once('pointerdown', () => {
-      panel.destroy(); txt.destroy();
+    // ─── Right column — tile & item legend ──────────────────
+    let ry = 68;
+    tx(COL2, ry, '── TILE LEGEND ──', '#ffd700', 11); ry += 18;
+
+    const tiles = [
+      ['tile-floor',        'Floor — safe to walk'],
+      ['tile-wall',         'Wall — impassable'],
+      ['tile-door',         'Door — opens on entry'],
+      ['tile-stairs-down',  'Stairs ↓  — descend (>)'],
+      ['tile-stairs-up',    'Stairs ↑  — ascend  (<)'],
+      ['tile-water',        'Water — slows movement'],
+      ['tile-lava',         'Lava — deals damage'],
+      ['tile-chest-closed', 'Chest — contains loot'],
+      ['tile-chest-open',   'Chest — already looted'],
+    ];
+    for (const [key, desc] of tiles) {
+      icon(COL2, ry, key);
+      tx(COL2 + 24, ry + 3, desc, '#99aabb', 11);
+      ry += 20;
+    }
+    // Trap: no separate texture — rendered as tinted floor at runtime
+    const trapDot = this.add.rectangle(PX + COL2 + 9, PY + ry + 9, 18, 18, 0xff4444, 0.7);
+    created.push(trapDot);
+    tx(COL2 + 24, ry + 3, 'Trap  — watch your step!', '#99aabb', 11);
+    ry += 20;
+
+    ry += 4;
+    tx(COL2, ry, '── ENTITY LEGEND ──', '#ffd700', 11); ry += 18;
+    const entities = [
+      ['player',           '#00ff88', 'You'],
+      ['monster-goblin',   '#44dd44', 'Monster'],
+      [null,               '#ffd700', 'Item / Gold on floor'],
+      [null,               '#ff3333', 'Monster (minimap)'],
+    ];
+    for (const [key, color, desc] of entities) {
+      if (key) {
+        icon(COL2, ry, key);
+      } else {
+        const dot = this.add.rectangle(PX + COL2 + 9, PY + ry + 9, 14, 14, parseInt(color.replace('#',''), 16), 1);
+        created.push(dot);
+      }
+      tx(COL2 + 24, ry + 3, desc, '#99aabb', 11);
+      ry += 20;
+    }
+
+    ry += 4;
+    tx(COL2, ry, '── ITEM TYPES ──', '#ffd700', 11); ry += 18;
+    const items = [
+      ['item-weapon',   'Weapon  — equip for ATK'],
+      ['item-armor',    'Armor   — equip for DEF'],
+      ['item-ring',     'Ring    — equip for bonus'],
+      ['item-amulet',   'Amulet  — equip for bonus'],
+      ['item-potion',   'Potion  — consumable'],
+      ['item-scroll',   'Scroll  — magical effect'],
+      ['item-material', 'Material — used in crafting'],
+      ['item-gold',     'Gold    — currency'],
+    ];
+    for (const [key, desc] of items) {
+      icon(COL2, ry, key);
+      tx(COL2 + 24, ry + 3, desc, '#99aabb', 11);
+      ry += 20;
+    }
+
+    // ── Close hint ──────────────────────────────────────────
+    tx(PW / 2, PH - 22, '[ Press any key or click to close ]', '#334455', 11).setOrigin(0.5, 0);
+
+    const close = () => { for (const o of created) o.destroy(); };
+
+    // Defer by one frame so the click that opened the panel
+    // doesn't immediately trigger the close listener.
+    this.time.delayedCall(0, () => {
+      this.input.keyboard.once('keydown', close);
+      this.input.once('pointerdown', close);
     });
   }
 }

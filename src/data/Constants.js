@@ -69,18 +69,19 @@ export const SCENE = Object.freeze({
 
 // ── Events ───────────────────────────────────────────────────
 export const EV = Object.freeze({
-  PLAYER_MOVED:   'playerMoved',
-  PLAYER_DIED:    'playerDied',
-  PLAYER_WIN:     'playerWin',
-  TURN_END:       'turnEnd',
-  FLOOR_CHANGED:  'floorChanged',
-  LOG_MSG:        'logMsg',
-  STATS_CHANGED:  'statsChanged',
-  OPEN_INVENTORY: 'openInventory',
-  OPEN_SKILLS:    'openSkills',
-  OPEN_CRAFTING:  'openCrafting',
-  OPEN_CHAR:      'openChar',
-  CLOSE_PANEL:    'closePanel',
+  PLAYER_MOVED:    'playerMoved',
+  PLAYER_DIED:     'playerDied',
+  PLAYER_WIN:      'playerWin',
+  TURN_END:        'turnEnd',
+  FLOOR_CHANGED:   'floorChanged',
+  LOG_MSG:         'logMsg',
+  STATS_CHANGED:   'statsChanged',
+  OPEN_INVENTORY:  'openInventory',
+  OPEN_SKILLS:     'openSkills',
+  OPEN_CRAFTING:   'openCrafting',
+  OPEN_CHAR:       'openChar',
+  CLOSE_PANEL:     'closePanel',
+  MINIMAP_UPDATE:  'minimapUpdate',
 });
 
 // ── Dungeon Config ───────────────────────────────────────────

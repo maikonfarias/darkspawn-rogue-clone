@@ -2,8 +2,14 @@
 //  Darkspawn Rogue Quest — UI Scene (HUD overlay)
 //  Runs in parallel with GameScene
 // ============================================================
-import { SCENE, EV, C } from '../data/Constants.js';
+import { SCENE, EV, C, VIS, TILE, MAP_W, MAP_H } from '../data/Constants.js';
 import { XP_TABLE } from '../data/Constants.js';
+
+const MM_SCALE = 2;   // pixels per tile on minimap
+const MM_X    = 6;    // minimap top-left X
+const MM_Y    = 6;    // minimap top-left Y
+const MM_W    = MAP_W * MM_SCALE;  // 160
+const MM_H    = MAP_H * MM_SCALE;  // 100
 
 export class UIScene extends Phaser.Scene {
   constructor() { super({ key: SCENE.UI }); }
@@ -22,7 +28,11 @@ export class UIScene extends Phaser.Scene {
 
     this.bus.on(EV.STATS_CHANGED,  () => this._refreshStats());
     this.bus.on(EV.LOG_MSG,        (msg) => this._addLog(msg));
-    this.bus.on(EV.FLOOR_CHANGED,  ({ floor }) => this._refreshFloor(floor));
+    this.bus.on(EV.FLOOR_CHANGED,  ({ floor }) => { this._refreshFloor(floor); this._updateMinimap(); });
+    this.bus.on(EV.MINIMAP_UPDATE, () => this._updateMinimap());
+
+    // Toggle minimap with M key
+    this.input.keyboard.on('keydown-M', () => this._toggleMinimap());
   }
 
   _buildHUD() {
@@ -78,7 +88,10 @@ export class UIScene extends Phaser.Scene {
 
     // Controls hint
     tx(8, 280, '[I]nv [K]ill [C]raft [P]', '#334455', 10);
-    tx(8, 292, 'WASD/Arrows to move', '#334455', 10);
+    tx(8, 292, 'WASD/Arrows  [M]inimap', '#334455', 10);
+
+    // ── Minimap (top-left) ────────────────────────────────────
+    this._buildMinimap();
 
     // ── Bottom message log ──────────────────────────────────
     const LOG_H = 80, LOG_Y = H - LOG_H - 4;
@@ -94,6 +107,105 @@ export class UIScene extends Phaser.Scene {
       );
     }
     this.logMessages = [];
+  }
+
+  // ── Minimap ─────────────────────────────────────────────
+
+  _buildMinimap() {
+    // Background panel
+    this.mmBg = this.add.rectangle(
+      MM_X + MM_W / 2, MM_Y + MM_H / 2,
+      MM_W + 4, MM_H + 4,
+      0x0d1117, 0.88
+    ).setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(10);
+
+    // Title label
+    this.mmLabel = this.add.text(MM_X, MM_Y - 12, '[ MINIMAP — M to toggle ]', {
+      fontFamily: 'Courier New', fontSize: '9px', color: '#334455'
+    }).setScrollFactor(0).setDepth(10);
+
+    // Graphics layer for tile pixels
+    this.mmGraphics = this.add.graphics().setScrollFactor(0).setDepth(11);
+
+    this.mmVisible = true;
+  }
+
+  _toggleMinimap() {
+    this.mmVisible = !this.mmVisible;
+    this.mmBg.setVisible(this.mmVisible);
+    this.mmLabel.setVisible(this.mmVisible);
+    this.mmGraphics.setVisible(this.mmVisible);
+  }
+
+  _updateMinimap() {
+    if (!this.mmGraphics || !this.mmVisible) return;
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.grid || !gs?.vis || !gs?.player) return;
+
+    const g   = this.mmGraphics;
+    const S   = MM_SCALE;
+    const ox  = MM_X;
+    const oy  = MM_Y;
+
+    g.clear();
+
+    // ── Tiles ────────────────────────────────────────────────
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) {
+        const v = gs.vis[y][x];
+        if (v === VIS.HIDDEN) continue;
+
+        const t = gs.grid[y][x];
+        let color;
+
+        if (v === VIS.EXPLORED) {
+          // Dim — seen but not currently lit
+          if (t === TILE.WALL)          color = 0x1a2233;
+          else if (t === TILE.STAIRS_DOWN) color = 0x1c4444;
+          else if (t === TILE.STAIRS_UP)   color = 0x443c18;
+          else                             color = 0x1b2535;
+        } else {
+          // Bright — currently visible
+          if (t === TILE.WALL)          color = 0x445566;
+          else if (t === TILE.STAIRS_DOWN) color = 0x44ffee;
+          else if (t === TILE.STAIRS_UP)   color = 0xffdd44;
+          else if (t === TILE.LAVA)        color = 0xff4500;
+          else if (t === TILE.WATER)       color = 0x1a6fff;
+          else if (t === TILE.DOOR)        color = 0x8b5e3c;
+          else if (t === TILE.CHEST_CLOSED) color = 0xffd700;
+          else if (t === TILE.CHEST_OPEN)  color = 0x886600;
+          else if (t === TILE.TRAP_VISIBLE) color = 0xff4444;
+          else                             color = 0x334455; // floor
+        }
+
+        g.fillStyle(color, 1);
+        g.fillRect(ox + x * S, oy + y * S, S, S);
+      }
+    }
+
+    // ── Floor items (gold / treasure) — visible tiles only ───
+    if (gs.floorItems) {
+      for (const fi of gs.floorItems) {
+        if (gs.vis[fi.y]?.[fi.x] === VIS.VISIBLE) {
+          g.fillStyle(0xffd700, 1);
+          g.fillRect(ox + fi.x * S, oy + fi.y * S, S, S);
+        }
+      }
+    }
+
+    // ── Monsters — visible tiles only ───────────────────────
+    if (gs.monsters) {
+      for (const m of gs.monsters) {
+        if (!m.isDead && gs.vis[m.y]?.[m.x] === VIS.VISIBLE) {
+          g.fillStyle(0xff3333, 1);
+          g.fillRect(ox + m.x * S, oy + m.y * S, S, S);
+        }
+      }
+    }
+
+    // ── Player — always shown ────────────────────────────────
+    g.fillStyle(0x00ff88, 1);
+    g.fillRect(ox + gs.player.x * S, oy + gs.player.y * S, S, S);
   }
 
   _refreshStats() {
