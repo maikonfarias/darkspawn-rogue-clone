@@ -55,7 +55,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   update() {
-    // Nothing time-based; everything is turn-driven
+    if (this.activePanel !== PANEL.NONE || this.targeting) return;
+
+    const now = Date.now();
+    for (const [code, pressTime] of Object.entries(this.heldKeys)) {
+      const dir = this.moveKeys[code];
+      if (!dir) continue;
+      const held = now - pressTime;
+      if (held >= this.keyRepeat && now - this.lastMoveTime >= this.keyInterval) {
+        this._playerMove(dir.dx, dir.dy);
+        this.lastMoveTime = now;
+        break;
+      }
+    }
   }
 
   // ── Floor Loading ────────────────────────────────────────
@@ -374,13 +386,27 @@ export class GameScene extends Phaser.Scene {
       num3: Phaser.Input.Keyboard.KeyCodes.NUMPAD_THREE,
     });
 
-    // Repeat-delay config
-    this.keyRepeat   = 180; // ms before repeat
-    this.keyInterval = 100; // ms between repeats
-    this.heldKeys = {};
-    this.lastMoveTime = 0;
+    // Repeat-delay config for hold-to-walk
+    this.keyRepeat   = 180; // ms of hold before repeat starts
+    this.keyInterval = 100; // ms between repeated moves while held
+    this.heldKeys    = {};  // code -> timestamp of first press (ms)
+    this.lastMoveTime = 0;  // timestamp of most recent held-key move (ms)
 
-    kb.on('keydown', (event) => { this._cancelClickWalk(); this._onKeyDown(event); });
+    // Direction map used by both _onKeyDown and the hold-to-walk update loop
+    this.moveKeys = {
+      ArrowUp:    { dx: 0, dy: -1 }, KeyW:    { dx: 0, dy: -1 }, Numpad8: { dx: 0,  dy: -1 },
+      ArrowDown:  { dx: 0, dy:  1 }, KeyS:    { dx: 0, dy:  1 }, Numpad2: { dx: 0,  dy:  1 },
+      ArrowLeft:  { dx: -1, dy: 0 }, KeyA:    { dx: -1, dy: 0 }, Numpad4: { dx: -1, dy:  0 },
+      ArrowRight: { dx:  1, dy: 0 }, KeyD:    { dx:  1, dy: 0 }, Numpad6: { dx:  1, dy:  0 },
+      Numpad7: { dx: -1, dy: -1 }, Numpad9: { dx: 1, dy: -1 },
+      Numpad1: { dx: -1, dy:  1 }, Numpad3: { dx: 1, dy:  1 },
+    };
+
+    kb.on('keydown', (event) => {
+      this._cancelClickWalk();
+      if (!this.heldKeys[event.code]) this.heldKeys[event.code] = Date.now();
+      this._onKeyDown(event);
+    });
     kb.on('keyup',   (event) => { delete this.heldKeys[event.code]; });
 
     this.input.on('pointerdown', (ptr) => this._onPointerDown(ptr));
@@ -405,17 +431,8 @@ export class GameScene extends Phaser.Scene {
     const now = Date.now();
 
     // Move
-    const DIR_MAP = {
-      ArrowUp:  {dx:0,dy:-1}, KeyW:{dx:0,dy:-1}, Numpad8:{dx:0,dy:-1},
-      ArrowDown:{dx:0,dy:1},  KeyS:{dx:0,dy:1},  Numpad2:{dx:0,dy:1},
-      ArrowLeft:{dx:-1,dy:0}, KeyA:{dx:-1,dy:0}, Numpad4:{dx:-1,dy:0},
-      ArrowRight:{dx:1,dy:0}, KeyD:{dx:1,dy:0},  Numpad6:{dx:1,dy:0},
-      Numpad7:{dx:-1,dy:-1}, Numpad9:{dx:1,dy:-1},
-      Numpad1:{dx:-1,dy:1},  Numpad3:{dx:1,dy:1},
-    };
-
-    if (DIR_MAP[code]) {
-      const { dx, dy } = DIR_MAP[code];
+    if (this.moveKeys[code]) {
+      const { dx, dy } = this.moveKeys[code];
       this._playerMove(dx, dy);
       return;
     }
