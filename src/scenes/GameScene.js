@@ -180,7 +180,7 @@ export class GameScene extends Phaser.Scene {
       const gx = rand(room.x + 1, room.x + room.w - 2);
       const gy = rand(room.y + 1, room.y + room.h - 2);
       const amount = rand(5, 15) * floor;
-      this.floorItems.push({ x: gx, y: gy, item: { ...createItem('gold'), value: amount, qty: amount } });
+      this.floorItems.push({ x: gx, y: gy, item: { ...createItem('gold'), value: amount } });
     }
   }
 
@@ -500,6 +500,15 @@ export class GameScene extends Phaser.Scene {
     // Move
     this.player.x = nx;
     this.player.y = ny;
+
+    // Auto-pickup gold
+    const goldPiles = this.floorItems.filter(f => f.x === nx && f.y === ny && f.item.type === ITEM_TYPE.GOLD);
+    for (const fi of goldPiles) {
+      this.player.pickUpItem(fi.item);
+      this.floorItems.splice(this.floorItems.indexOf(fi), 1);
+    }
+    if (goldPiles.length > 0) this._rebuildItemSprites();
+
     this._endPlayerTurn();
   }
 
