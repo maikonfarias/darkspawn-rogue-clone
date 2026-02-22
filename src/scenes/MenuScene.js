@@ -2,6 +2,7 @@
 //  Darkspawn Rogue Quest — Menu Scene
 // ============================================================
 import { SCENE, C } from '../data/Constants.js';
+import { hasSave, saveTimestamp } from '../systems/SaveSystem.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super({ key: SCENE.MENU }); }
@@ -54,13 +55,29 @@ export class MenuScene extends Phaser.Scene {
       }).setOrigin(0.5);
     });
 
-    // Buttons
-    this._makeButton(W / 2, H / 2 + 30, '  [ NEW GAME ]  ', '#ffd700', '#221100', () => {
+    // Buttons — shift down if save exists to make room for Continue
+    const hasSaveFile = hasSave();
+    const btnOffset = hasSaveFile ? 35 : 0;
+
+    if (hasSaveFile) {
+      const ts = saveTimestamp();
+      this._makeButton(W / 2, H / 2 - 30, '  [ CONTINUE ]  ', '#88ffcc', '#001a10', () => {
+        this.scene.start(SCENE.GAME, { loadSave: true });
+        this.scene.launch(SCENE.UI);
+      });
+      if (ts) {
+        this.add.text(W / 2, H / 2 + 6, ts, {
+          fontFamily: 'Courier New', fontSize: '11px', color: '#445544',
+        }).setOrigin(0.5);
+      }
+    }
+
+    this._makeButton(W / 2, H / 2 + 30 + btnOffset, '  [ NEW GAME ]  ', '#ffd700', '#221100', () => {
       this.scene.start(SCENE.GAME);
       this.scene.launch(SCENE.UI);
     });
 
-    this._makeButton(W / 2, H / 2 + 90, '  [ HOW TO PLAY ]  ', '#88aacc', '#001122', () => {
+    this._makeButton(W / 2, H / 2 + 90 + btnOffset, '  [ HOW TO PLAY ]  ', '#88aacc', '#001122', () => {
       this._showHelp();
     });
 

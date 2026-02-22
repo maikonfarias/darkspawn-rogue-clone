@@ -4,6 +4,7 @@
 // ============================================================
 import { SCENE, EV, C, VIS, TILE, MAP_W, MAP_H } from '../data/Constants.js';
 import { XP_TABLE } from '../data/Constants.js';
+import { saveGame } from '../systems/SaveSystem.js';
 
 const MM_SCALE = 2;   // pixels per tile on minimap
 const MM_X    = 6;    // minimap top-left X
@@ -407,11 +408,11 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0).setDepth(50).setInteractive());
 
     // Panel box
-    const PW = 380, PH = 270;
+    const PW = 380, PH = 330;
     add(this.add.rectangle(W / 2, H / 2, PW, PH, 0x0a0a14, 0.97)
       .setScrollFactor(0).setDepth(51).setStrokeStyle(2, 0x334466));
 
-    add(this.add.text(W / 2, H / 2 - 108, '❚❚  PAUSED', {
+    add(this.add.text(W / 2, H / 2 - 138, '❚❚  PAUSED', {
       fontFamily: 'Courier New', fontSize: '26px', color: '#ffd700',
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(52));
@@ -427,9 +428,18 @@ export class UIScene extends Phaser.Scene {
       return btn;
     };
 
-    mkBtn('[ CONTINUE ]',    H / 2 - 20, '#44ff88', () => this.bus.emit(EV.RESUME_GAME));
-    mkBtn('[ HOW TO PLAY ]', H / 2 + 40, '#88aaff', () => this._showInstructions());
-    mkBtn('[ MAIN MENU ]',   H / 2 + 100, '#ff8888', () => {
+    mkBtn('[ CONTINUE ]',    H / 2 - 50, '#44ff88', () => this.bus.emit(EV.RESUME_GAME));
+    mkBtn('[ SAVE GAME ]',   H / 2 + 10, '#ffd700', () => {
+      const gs = this.scene.get(SCENE.GAME);
+      const ok = saveGame(gs);
+      this.bus.emit(EV.LOG_MSG, {
+        text: ok ? '💾 Game saved!' : '⚠ Save failed.',
+        color: ok ? '#88ffcc' : '#ff8888',
+      });
+      this.bus.emit(EV.RESUME_GAME);
+    });
+    mkBtn('[ HOW TO PLAY ]', H / 2 + 70, '#88aaff', () => this._showInstructions());
+    mkBtn('[ MAIN MENU ]',   H / 2 + 130, '#ff8888', () => {
       this.bus.emit(EV.RESUME_GAME);
       this.scene.stop(SCENE.UI);
       this.scene.stop(SCENE.GAME);

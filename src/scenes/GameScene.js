@@ -17,6 +17,7 @@ import { rand, chance, pick, weightedPick } from '../utils/Random.js';
 import { findPath } from '../systems/AStarPathfinder.js';
 import { SKILL_TREES, SKILL_BY_ID } from '../data/SkillData.js';
 import { RECIPES } from '../data/RecipeData.js';
+import { saveGame, loadGame } from '../systems/SaveSystem.js';
 
 const T = TILE_SIZE;
 
@@ -51,7 +52,14 @@ export class GameScene extends Phaser.Scene {
     this._clickWalkTimer = null;
 
     this._setupInput();
-    this._loadFloor(this.floor);
+
+    // Load from save if requested by MenuScene
+    const savedData = this.scene.settings.data?.loadSave ? loadGame() : null;
+    if (savedData) {
+      this._loadSave(savedData);
+    } else {
+      this._loadFloor(this.floor);
+    }
 
     // Listen for events from UIScene
     this.events_bus.on(EV.PLAYER_DIED,  () => this._onDeath());
@@ -651,6 +659,52 @@ export class GameScene extends Phaser.Scene {
       floorItems: this.floorItems,
       startPos:   this._floorStartPos,
       endPos:     this._floorEndPos,
+    });
+  }
+
+  /** Restore full game state from a save object returned by loadGame(). */
+  _loadSave(data) {
+    // ── Restore floor cache (already deserialized as a Map) ──
+    this.floorCache = data.floorCache;
+    this.floor      = data.floor;
+
+    // ── Restore player fields ─────────────────────────────────
+    const p  = this.player;
+    const sp = data.player;
+    p.name          = sp.name ?? 'Hero';
+    p.x             = sp.x;
+    p.y             = sp.y;
+    p.baseStats     = { ...sp.baseStats };
+    Object.assign(p.stats, sp.stats);
+    p.level         = sp.level;
+    p.xp            = sp.xp;
+    p.gold          = sp.gold;
+    p.skillPoints   = sp.skillPoints;
+    p.inventory     = sp.inventory.map(it => it ? { ...it } : null);
+    p.equipment     = Object.fromEntries(
+      Object.entries(sp.equipment).map(([k, v]) => [k, v ? { ...v } : null])
+    );
+    p.skills        = new Set(sp.skills);
+    p.statusEffects = sp.statusEffects.map(e => ({ ...e }));
+    p.refreshStats();
+
+    // ── Load the saved floor from cache ───────────────────────
+    // _loadFloor will override player position to the stair pos;
+    // we correct it immediately after.
+    this._loadFloor(data.floor);
+
+    // ── Restore exact saved position ──────────────────────────
+    this.player.x = sp.x;
+    this.player.y = sp.y;
+    if (this.playerSprite) {
+      this.playerSprite.setPosition(sp.x * T + T / 2, sp.y * T + T / 2);
+    }
+    // Recompute FOV from actual position
+    this._updateFOV();
+
+    this.events_bus.emit(EV.LOG_MSG, {
+      text: `Save loaded — Floor ${data.floor}. Welcome back!`,
+      color: '#88ffcc',
     });
   }
 
