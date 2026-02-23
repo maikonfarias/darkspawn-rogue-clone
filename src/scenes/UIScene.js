@@ -4,9 +4,13 @@
 // ============================================================
 import { SCENE, EV, C, VIS, TILE, MAP_W, MAP_H } from '../data/Constants.js';
 import { XP_TABLE } from '../data/Constants.js';
+import { SKILL_BY_ID } from '../data/SkillData.js';
 import { saveGame } from '../systems/SaveSystem.js';
 import { Music } from '../systems/ProceduralMusic.js';
 import { SFX } from '../systems/SoundEffects.js';
+
+const ACTIVE_SKILL_ORDER = ['berserkerRage','whirlwind','shadowStep','deathMark','magicBolt','fireball','iceNova','arcaneShield'];
+const TARGETABLE_SKILLS  = new Set(['magicBolt','fireball','shadowStep','deathMark']);
 
 const MM_SCALE = 2;   // pixels per tile on minimap
 const MM_X    = 6;    // minimap top-left X
@@ -36,9 +40,19 @@ export class UIScene extends Phaser.Scene {
     this.bus.on(EV.PAUSE_GAME,     () => this._openPauseMenu());
     this.bus.on(EV.RESUME_GAME,    () => this._closePauseMenu());
     this.bus.on(EV.STATS_CHANGED,  () => this._refreshInventory());
+    this.bus.on(EV.STATS_CHANGED,  () => this._refreshSkillHotbar());
+    this.bus.on('skill-selection-done', () => this._clearSkillSelection());
 
     // Toggle minimap with M key
     this.input.keyboard.on('keydown-M', () => this._toggleMinimap());
+    // Skill hotkeys 1–8
+    this.input.keyboard.on('keydown', (event) => {
+      if (event.key >= '1' && event.key <= '8') {
+        const idx = parseInt(event.key) - 1;
+        const skillId = this._hotbarSkills?.[idx];
+        if (skillId) this._useHotbarSkill(skillId);
+      }
+    });
 
     this._refreshStats();
     this._refreshInventory();
@@ -96,11 +110,14 @@ export class UIScene extends Phaser.Scene {
     this.equipAmu = tx(8, 260, 'AMU: None',  '#cccccc', 11);
 
     // Controls hint
-    tx(8, 280, '[K]ills [C]raft [P]char [I]detail', '#334455', 10);
-    tx(8, 292, 'WASD/Arrows  [M]inimap  [Space]=act', '#334455', 10);
+    tx(8, 280, '[K]kills [C]raft [P]char [I]detail', '#334455', 10);
+    tx(8, 292, 'WASD  [M]ap  1–8:skills  [Space]=act', '#334455', 10);
 
     // ── Always-visible Inventory (below stats panel) ─────────
     this._buildInvPanel(W, PX, PY + PH);
+
+    // ── Skill Hotbar (above log, bottom-centre) ───────────────
+    this._buildSkillHotbar(W, H);
 
     // ── Minimap (top-left) ────────────────────────────────────
     this._buildMinimap();
@@ -128,6 +145,151 @@ export class UIScene extends Phaser.Scene {
     pauseBtn.on('pointerover', () => pauseBtn.setColor('#ffd700'));
     pauseBtn.on('pointerout',  () => pauseBtn.setColor('#88aacc'));
     pauseBtn.on('pointerdown', () => this.bus.emit(EV.PAUSE_GAME));
+  }
+
+  // ── Skill Hotbar ─────────────────────────────────────────
+
+  _buildSkillHotbar(W, H) {
+    const SZ = 44, GAP = 4;
+    const LOG_H = 80, LOG_Y = H - LOG_H - 4;
+    const HB_Y = LOG_Y - SZ - 14;
+    const maxSlots = 8;
+    const panelW = maxSlots * (SZ + GAP) - GAP + 16;
+
+    // Static background panel (always visible)
+    this.add.rectangle(W / 2, HB_Y + SZ / 2 + 4, panelW, SZ + 20, 0x0d1117, 0.88)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(4);
+    this.add.text(W / 2, HB_Y - 3, '── SKILLS ──', {
+      fontFamily: 'Courier New', fontSize: '10px', color: '#334466',
+    }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(4);
+
+    this._hotbarSZ  = SZ;
+    this._hotbarGAP = GAP;
+    this._hotbarY   = HB_Y;
+    this._hotbarW   = W;
+    this._hotbarSkills = [];
+    this._hotbarSlotObjects = [];
+    this._selectedSkillId = null;  // two-click selection state
+
+    this._refreshSkillHotbar();
+  }
+
+  _refreshSkillHotbar() {
+    // Destroy previous slot visuals
+    if (this._hotbarSlotObjects) {
+      for (const o of this._hotbarSlotObjects) { try { o.destroy(); } catch (_) {} }
+    }
+    this._hotbarSlotObjects = [];
+    this._hotbarSkills = [];
+
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player || !this._hotbarSZ) return;
+
+    const unlocked = ACTIVE_SKILL_ORDER.filter(id => gs.player.skills.has(id));
+    this._hotbarSkills = unlocked;
+    if (unlocked.length === 0) return;
+
+    const SZ = this._hotbarSZ, GAP = this._hotbarGAP;
+    const totalW = unlocked.length * (SZ + GAP) - GAP;
+    const startX = (this._hotbarW - totalW) / 2;
+    const HB_Y   = this._hotbarY;
+
+    unlocked.forEach((skillId, i) => {
+      const sx = startX + i * (SZ + GAP);
+      const mana     = SKILL_BY_ID[skillId]?.active?.cost ?? 0;
+      const hasMana  = gs.player.stats.mana >= mana;
+
+      const isSelected = this._selectedSkillId === skillId;
+      const bg = this.add.rectangle(sx + SZ / 2, HB_Y + SZ / 2, SZ, SZ,
+        isSelected ? 0x0d2210 : (hasMana ? 0x161622 : 0x160808), 1)
+        .setStrokeStyle(isSelected ? 2 : 1, isSelected ? 0x00cc44 : (hasMana ? 0x4455aa : 0x552222))
+        .setScrollFactor(0).setDepth(4).setInteractive({ useHandCursor: true });
+
+      const icon = this.add.image(sx + SZ / 2, HB_Y + SZ / 2 - 5, `skill-${skillId}`)
+        .setDisplaySize(28, 28).setScrollFactor(0).setDepth(5);
+      if (!hasMana) icon.setTint(0x333333);
+
+      // Green inner-border when selected
+      if (isSelected) {
+        const sel = this.add.rectangle(sx + SZ / 2, HB_Y + SZ / 2, SZ - 6, SZ - 6, 0x000000, 0)
+          .setStrokeStyle(2, 0x00ff66).setScrollFactor(0).setDepth(5.5);
+        this._hotbarSlotObjects.push(sel);
+      }
+
+      const numLbl = this.add.text(sx + 3, HB_Y + 2, `${i + 1}`, {
+        fontFamily: 'Courier New', fontSize: '9px', color: '#6677bb',
+      }).setScrollFactor(0).setDepth(5);
+
+      const costLbl = this.add.text(sx + SZ / 2, HB_Y + SZ - 4, `${mana}mp`, {
+        fontFamily: 'Courier New', fontSize: '8px',
+        color: hasMana ? '#5566cc' : '#663333',
+      }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(5);
+
+      bg.on('pointerover', () => bg.setFillStyle(isSelected ? 0x113318 : (hasMana ? 0x222233 : 0x210d0d)));
+      bg.on('pointerout',  () => bg.setFillStyle(isSelected ? 0x0d2210 : (hasMana ? 0x161622 : 0x160808)));
+      bg.on('pointerdown', () => this._useHotbarSkill(skillId));
+
+      // Tooltip on hover
+      const def = SKILL_BY_ID[skillId];
+      bg.on('pointerover', () => {
+        bg.setFillStyle(hasMana ? 0x222233 : 0x210d0d);
+        this.bus.emit(EV.LOG_MSG, { text: `[${i+1}] ${def.name} (${mana}mp) — ${def.description}`, color: '#8899cc' });
+      });
+
+      this._hotbarSlotObjects.push(bg, icon, numLbl, costLbl);
+    });
+  }
+
+  _clearSkillSelection() {
+    this._selectedSkillId = null;
+    this._refreshSkillHotbar();
+  }
+
+  _useHotbarSkill(skillId) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs || gs.gamePaused || gs.activePanel !== 0) return;
+
+    const isTargetable = TARGETABLE_SKILLS.has(skillId);
+
+    if (this._selectedSkillId === skillId) {
+      // Same skill pressed again
+      if (isTargetable) {
+        gs._cancelTargeting(); // emits 'skill-selection-done' → _clearSkillSelection()
+      } else {
+        // Instant: cast now
+        this._clearSkillSelection();
+        gs.useActiveSkill(skillId);
+        this.time.delayedCall(50, () => this._refreshSkillHotbar());
+      }
+      return;
+    }
+
+    // Cancel any previous selection without emitting the done-event
+    if (this._selectedSkillId) {
+      if (TARGETABLE_SKILLS.has(this._selectedSkillId)) gs._cancelTargeting(false);
+      this._selectedSkillId = null;
+    }
+
+    // Pre-check mana before showing the selection
+    const mana = SKILL_BY_ID[skillId]?.active?.cost ?? 0;
+    if (gs.player.stats.mana < mana) {
+      this.bus.emit(EV.LOG_MSG, { text: 'Not enough mana!', color: '#ff8888' });
+      this._refreshSkillHotbar();
+      return;
+    }
+
+    // Select the skill (show green)
+    this._selectedSkillId = skillId;
+    this._refreshSkillHotbar();
+
+    const def = SKILL_BY_ID[skillId];
+    const idx = ACTIVE_SKILL_ORDER.indexOf(skillId) + 1;
+    if (isTargetable) {
+      gs._enterTargetingMode(skillId);
+      this.bus.emit(EV.LOG_MSG, { text: `${def.name} — click a tile to cast, or [${idx}] again to cancel.`, color: '#88aaff' });
+    } else {
+      this.bus.emit(EV.LOG_MSG, { text: `${def.name} selected — press [${idx}] again to cast.`, color: '#88aaff' });
+    }
   }
 
   // ── Always-visible Inventory Panel ───────────────────────────
@@ -193,14 +355,13 @@ export class UIScene extends Phaser.Scene {
 
       if (item) {
         slot.bg.setFillStyle(0x1e2a3a).setStrokeStyle(1, 0x334466);
-        slot.icon.setTexture(`item-${item.type}`).setVisible(true);
+        slot.icon.setTexture(`item-${item.id ?? item.type}`).setVisible(true);
         slot.qty.setText(item.qty > 1 ? String(item.qty) : '');
       } else {
         slot.bg.setFillStyle(0x111118).setStrokeStyle(1, 0x223344);
         slot.icon.setVisible(false);
         slot.qty.setText('');
-      }
-    }
+      }    }
   }
 
   _onInvSlotClick(slot) {
@@ -211,14 +372,15 @@ export class UIScene extends Phaser.Scene {
     if (!item) return;
 
     if (!slot._selectedOnce) {
-      // First click: show info
+      // First click: show info + green selection border
       slot._selectedOnce = true;
-      slot.bg.setFillStyle(0x334466);
+      slot.bg.setFillStyle(0x0d2210).setStrokeStyle(2, 0x00cc44);
       // Reset all other slots
       for (const s of this._invSlots) {
         if (s !== slot && s._selectedOnce) {
           s._selectedOnce = false;
-          s.bg.setFillStyle(s._item ? 0x1e2a3a : 0x111118);
+          s.bg.setFillStyle(s._item ? 0x1e2a3a : 0x111118)
+             .setStrokeStyle(1, s._item ? 0x334466 : 0x223344);
         }
       }
       let info = `${item.name}`;
@@ -231,6 +393,7 @@ export class UIScene extends Phaser.Scene {
     } else {
       // Second click: use / equip
       slot._selectedOnce = false;
+      slot.bg.setFillStyle(0x1e2a3a).setStrokeStyle(1, 0x334466);
       if (item.type === 'potion')   SFX.play('potion');
       else if (item.type === 'gold') SFX.play('coin');
       else SFX.play('equip');

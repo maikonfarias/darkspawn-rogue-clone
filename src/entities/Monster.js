@@ -95,6 +95,9 @@ export class Monster {
 
     // Flee if HP < 25%
     if (this.stats.hp < this.stats.maxHp * 0.25 && this.def.aiType !== 'boss') {
+      if (this.aiState !== AI.FLEE) {
+        events.emit(EV.LOG_MSG, { text: `${this.name} tries to flee!`, color: '#ffaa44' });
+      }
       this.aiState = AI.FLEE;
     }
 
@@ -122,9 +125,13 @@ export class Monster {
     if (this.def.aiType === 'ranged' && !this._isAdjacent(player.x, player.y)) return;
 
     const result = resolveAttack(this, player, events);
-    if (!result.hit) return;
+    if (!result.hit) {
+      events.emit('float-dmg', { x: player.x, y: player.y, dmg: 'MISS', color: '#aabbcc' });
+      return;
+    }
 
     SFX.play('hit');
+    events.emit('float-dmg', { x: player.x, y: player.y, dmg: result.damage, color: result.crit ? '#ff2200' : '#ff7777' });
 
     let msg = `${this.name} hits you for ${result.damage} damage`;
     if (result.crit) msg += ' (CRITICAL!)';

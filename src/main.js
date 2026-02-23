@@ -7,6 +7,19 @@ import { MenuScene }    from './scenes/MenuScene.js';
 import { GameScene }    from './scenes/GameScene.js';
 import { UIScene }      from './scenes/UIScene.js';
 import { GameOverScene } from './scenes/GameOverScene.js';
+import { Music }        from './systems/ProceduralMusic.js';
+import { SFX }          from './systems/SoundEffects.js';
+
+// Pause/resume all audio when the browser tab loses/gains focus
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    Music.suspend();
+    SFX.suspend();
+  } else {
+    Music.resume();
+    SFX.resume();
+  }
+});
 
 const config = {
   type: Phaser.AUTO,

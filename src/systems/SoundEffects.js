@@ -44,8 +44,27 @@ class SoundEffectsEngine {
       case 'stairs-down': this._stairs(ctx, false); break;
       case 'stairs-up':   this._stairs(ctx, true);  break;
       case 'use':         this._use(ctx);        break;
+      // Skills
+      case 'skill-magicBolt':   this._sndMagicBolt(ctx);   break;
+      case 'skill-fireball':    this._sndFireball(ctx);    break;
+      case 'skill-iceNova':     this._sndIceNova(ctx);     break;
+      case 'skill-arcaneShield':this._sndArcaneShield(ctx);break;
+      case 'skill-berserker':   this._sndBerserker(ctx);   break;
+      case 'skill-whirlwind':   this._sndWhirlwind(ctx);   break;
+      case 'skill-shadowStep':  this._sndShadowStep(ctx);  break;
+      case 'skill-deathMark':   this._sndDeathMark(ctx);   break;
       default: break;
     }
+  }
+
+  /** Suspend the AudioContext when the tab is hidden. */
+  suspend() {
+    if (this._ctx && this._ctx.state === 'running') this._ctx.suspend().catch(() => {});
+  }
+
+  /** Resume the AudioContext when the tab becomes visible. */
+  resume() {
+    if (this._ctx && this._ctx.state === 'suspended') this._ctx.resume().catch(() => {});
   }
 
   // ── Internal helpers ────────────────────────────────────
@@ -351,47 +370,34 @@ class SoundEffectsEngine {
     });
   }
 
-  /** Wooden door creak + latch click */
+  /** Wooden door — short punchy knock + quick creak (~0.28 s total) */
   _door(ctx) {
     const now = ctx.currentTime;
     const out = this._master(ctx, 0.80, 0.90);
 
-    // Initial wooden knock as the door is pushed
-    const knock = this._osc(ctx, 'sine', 130);
+    // Sharp wood thud
+    const knock = this._osc(ctx, 'sine', 140);
     const knockG = ctx.createGain();
     knockG.gain.setValueAtTime(0.001, now);
-    knockG.gain.linearRampToValueAtTime(0.70, now + 0.010);
-    knockG.gain.linearRampToValueAtTime(0.001, now + 0.12);
-    knock.frequency.linearRampToValueAtTime(75, now + 0.12);
+    knockG.gain.linearRampToValueAtTime(0.80, now + 0.008);
+    knockG.gain.linearRampToValueAtTime(0.001, now + 0.07);
+    knock.frequency.linearRampToValueAtTime(70, now + 0.07);
     knock.connect(knockG); knockG.connect(out);
-    knock.start(now); knock.stop(now + 0.14);
+    knock.start(now); knock.stop(now + 0.08);
 
-    // Long slow creak — two layered bandpass noises at different resonances
-    // that slowly fade out as the door swings open
-    [[340, 4.5, 0.85], [200, 3.0, 0.55]].forEach(([freq, Q, amp]) => {
+    // Brief bandpass creak
+    [[360, 5.0, 0.80], [210, 3.5, 0.55]].forEach(([freq, Q, amp]) => {
       const n  = this._noise(ctx);
       const bp = this._filter(ctx, 'bandpass', freq, Q);
-      bp.frequency.setValueAtTime(freq,         now + 0.08);
-      bp.frequency.linearRampToValueAtTime(freq * 0.70, now + 0.75);
+      bp.frequency.setValueAtTime(freq, now + 0.05);
+      bp.frequency.linearRampToValueAtTime(freq * 0.65, now + 0.25);
       const eg = ctx.createGain();
-      eg.gain.setValueAtTime(0.001, now + 0.06);
-      eg.gain.linearRampToValueAtTime(amp,  now + 0.14);
-      eg.gain.setValueAtTime(amp * 0.6,     now + 0.50);
-      eg.gain.linearRampToValueAtTime(0.001, now + 0.80);
+      eg.gain.setValueAtTime(0.001, now + 0.04);
+      eg.gain.linearRampToValueAtTime(amp,   now + 0.08);
+      eg.gain.linearRampToValueAtTime(0.001, now + 0.28);
       n.connect(bp); bp.connect(eg); eg.connect(out);
-      n.start(now + 0.06); n.stop(now + 0.85);
+      n.start(now + 0.04); n.stop(now + 0.30);
     });
-
-    // Soft wood-settle thud at the end — no tonal click
-    const settle = this._osc(ctx, 'sine', 95);
-    const settleG = ctx.createGain();
-    settleG.gain.setValueAtTime(0.001, now + 0.72);
-    settleG.gain.linearRampToValueAtTime(0.35, now + 0.730);
-    settleG.gain.linearRampToValueAtTime(0.001, now + 0.88);
-    settle.frequency.setValueAtTime(95, now + 0.72);
-    settle.frequency.linearRampToValueAtTime(55, now + 0.88);
-    settle.connect(settleG); settleG.connect(out);
-    settle.start(now + 0.72); settle.stop(now + 0.90);
   }
 
   /** Item consumed / scroll used — magical shimmer */
@@ -420,6 +426,172 @@ class SoundEffectsEngine {
       o.connect(g); g.connect(out);
       o.start(now + t); o.stop(now + t + 0.40);
     });
+  }
+  // ── Skill Sounds ─────────────────────────────────────────
+
+  /** Magic Bolt — sharp electric zap */
+  _sndMagicBolt(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.55, 0.35);
+    // Thin high sine zap
+    const o = this._osc(ctx, 'sine', 900);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.001, now); g.gain.linearRampToValueAtTime(0.8, now + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    o.frequency.setValueAtTime(900, now); o.frequency.exponentialRampToValueAtTime(2400, now + 0.20);
+    o.connect(g); g.connect(out); o.start(now); o.stop(now + 0.25);
+    // Electric crackle
+    const noise = this._noise(ctx);
+    const hp = this._filter(ctx, 'highpass', 1800);
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.5, now); ng.gain.linearRampToValueAtTime(0.001, now + 0.12);
+    noise.connect(hp); hp.connect(ng); ng.connect(out);
+    noise.start(now); noise.stop(now + 0.14);
+  }
+
+  /** Fireball — whoosh + low boom */
+  _sndFireball(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.65, 0.55);
+    // Swoosh
+    const noise = this._noise(ctx);
+    const bp = this._filter(ctx, 'bandpass', 400, 1.5);
+    bp.frequency.setValueAtTime(800, now); bp.frequency.exponentialRampToValueAtTime(200, now + 0.25);
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.001, now); ng.gain.linearRampToValueAtTime(0.9, now + 0.04);
+    ng.gain.linearRampToValueAtTime(0.001, now + 0.30);
+    noise.connect(bp); bp.connect(ng); ng.connect(out);
+    noise.start(now); noise.stop(now + 0.32);
+    // Low boom at impact
+    const boom = this._osc(ctx, 'sine', 80);
+    const bg = ctx.createGain();
+    bg.gain.setValueAtTime(0.001, now + 0.18); bg.gain.linearRampToValueAtTime(0.9, now + 0.21);
+    bg.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    boom.frequency.setValueAtTime(80, now + 0.18); boom.frequency.linearRampToValueAtTime(38, now + 0.55);
+    boom.connect(bg); bg.connect(out); boom.start(now + 0.18); boom.stop(now + 0.58);
+  }
+
+  /** Ice Nova — cold crystalline burst */
+  _sndIceNova(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.55, 0.45);
+    // Icy descending sweep
+    const sweep = this._osc(ctx, 'sine', 1800);
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.001, now); sg.gain.linearRampToValueAtTime(0.6, now + 0.02);
+    sg.gain.linearRampToValueAtTime(0.001, now + 0.35);
+    sweep.frequency.setValueAtTime(1800, now); sweep.frequency.exponentialRampToValueAtTime(300, now + 0.35);
+    sweep.connect(sg); sg.connect(out); sweep.start(now); sweep.stop(now + 0.37);
+    // Crystal tings
+    [[0.05, 3520, 0.20], [0.10, 4186, 0.18], [0.16, 2794, 0.15]].forEach(([t, freq, amp]) => {
+      const o = this._osc(ctx, 'sine', freq);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, now + t); g.gain.linearRampToValueAtTime(amp, now + t + 0.006);
+      g.gain.setTargetAtTime(0.001, now + t + 0.012, 0.05);
+      o.connect(g); g.connect(out); o.start(now + t); o.stop(now + t + 0.35);
+    });
+  }
+
+  /** Arcane Shield — rising shimmer + hum */
+  _sndArcaneShield(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.50, 0.50);
+    // Rising hum
+    const hum = this._osc(ctx, 'sine', 200);
+    const hg = ctx.createGain();
+    hg.gain.setValueAtTime(0.001, now); hg.gain.linearRampToValueAtTime(0.6, now + 0.08);
+    hg.gain.setValueAtTime(0.5, now + 0.25); hg.gain.linearRampToValueAtTime(0.001, now + 0.50);
+    hum.frequency.setValueAtTime(200, now); hum.frequency.linearRampToValueAtTime(440, now + 0.30);
+    hum.connect(hg); hg.connect(out); hum.start(now); hum.stop(now + 0.52);
+    // Shimmer tings
+    [[0.00, 2093, 0.25], [0.08, 2637, 0.22], [0.16, 3136, 0.18], [0.24, 4186, 0.15]].forEach(([t, freq, amp]) => {
+      const o = this._osc(ctx, 'sine', freq);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, now + t); g.gain.linearRampToValueAtTime(amp, now + t + 0.006);
+      g.gain.setTargetAtTime(0.001, now + t + 0.01, 0.07);
+      o.connect(g); g.connect(out); o.start(now + t); o.stop(now + t + 0.42);
+    });
+  }
+
+  /** Berserker Rage — short war cry burst */
+  _sndBerserker(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.75, 0.50);
+    // Guttural noise burst
+    const noise = this._noise(ctx);
+    const bp = this._filter(ctx, 'bandpass', 220, 2.0);
+    const lp = this._filter(ctx, 'lowpass', 500);
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.001, now); ng.gain.linearRampToValueAtTime(0.9, now + 0.015);
+    ng.gain.setValueAtTime(0.9, now + 0.12); ng.gain.linearRampToValueAtTime(0.001, now + 0.38);
+    noise.connect(bp); bp.connect(lp); lp.connect(ng); ng.connect(out);
+    noise.start(now); noise.stop(now + 0.42);
+    // Growl undertone
+    const rumble = this._osc(ctx, 'sawtooth', 65);
+    const lp2 = this._filter(ctx, 'lowpass', 200);
+    const rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.001, now); rg.gain.linearRampToValueAtTime(0.45, now + 0.02);
+    rg.gain.linearRampToValueAtTime(0.001, now + 0.35);
+    rumble.connect(lp2); lp2.connect(rg); rg.connect(out);
+    rumble.start(now); rumble.stop(now + 0.38);
+  }
+
+  /** Whirlwind — sweeping spin whoosh */
+  _sndWhirlwind(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.55, 0.50);
+    // Spinning bandpass sweep — twice around
+    [[0.00, 300, 900], [0.18, 900, 300], [0.30, 300, 700]].forEach(([t, f0, f1]) => {
+      const noise = this._noise(ctx);
+      const bp = this._filter(ctx, 'bandpass', f0, 2.5);
+      bp.frequency.setValueAtTime(f0, now + t);
+      bp.frequency.linearRampToValueAtTime(f1, now + t + 0.16);
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.001, now + t); ng.gain.linearRampToValueAtTime(0.7, now + t + 0.03);
+      ng.gain.linearRampToValueAtTime(0.001, now + t + 0.18);
+      noise.connect(bp); bp.connect(ng); ng.connect(out);
+      noise.start(now + t); noise.stop(now + t + 0.20);
+    });
+  }
+
+  /** Shadow Step — teleport pop + sweep */
+  _sndShadowStep(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.50, 0.35);
+    // Vanish: descending sweep
+    const vanish = this._osc(ctx, 'sine', 600);
+    const vg = ctx.createGain();
+    vg.gain.setValueAtTime(0.5, now); vg.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    vanish.frequency.setValueAtTime(600, now); vanish.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+    vanish.connect(vg); vg.connect(out); vanish.start(now); vanish.stop(now + 0.14);
+    // Appear: ascending pop
+    const appear = this._osc(ctx, 'sine', 120);
+    const ag = ctx.createGain();
+    ag.gain.setValueAtTime(0.001, now + 0.12); ag.gain.linearRampToValueAtTime(0.6, now + 0.15);
+    ag.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    appear.frequency.setValueAtTime(120, now + 0.12); appear.frequency.exponentialRampToValueAtTime(800, now + 0.30);
+    appear.connect(ag); ag.connect(out); appear.start(now + 0.12); appear.stop(now + 0.37);
+  }
+
+  /** Death Mark — dark ominous chord */
+  _sndDeathMark(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.55, 0.55);
+    // Dark minor cluster
+    [[110, 0.45], [147, 0.30], [165, 0.20]].forEach(([freq, amp]) => {
+      const o = this._osc(ctx, 'sawtooth', freq);
+      const lp = this._filter(ctx, 'lowpass', 400);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, now); g.gain.linearRampToValueAtTime(amp, now + 0.04);
+      g.gain.setValueAtTime(amp * 0.6, now + 0.20); g.gain.linearRampToValueAtTime(0.001, now + 0.55);
+      o.connect(lp); lp.connect(g); g.connect(out); o.start(now); o.stop(now + 0.58);
+    });
+    // High ominous ping
+    const ping = this._osc(ctx, 'sine', 1047);
+    const pg = ctx.createGain();
+    pg.gain.setValueAtTime(0.001, now); pg.gain.linearRampToValueAtTime(0.3, now + 0.006);
+    pg.gain.setTargetAtTime(0.001, now + 0.012, 0.12);
+    ping.connect(pg); pg.connect(out); ping.start(now); ping.stop(now + 0.55);
   }
 }
 

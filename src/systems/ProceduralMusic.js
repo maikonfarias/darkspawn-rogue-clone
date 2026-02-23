@@ -70,6 +70,16 @@ class ProceduralMusicEngine {
 
   get isPlaying() { return this._playing; }
 
+  /** Suspend the AudioContext (e.g. tab hidden). */
+  suspend() {
+    if (this._ctx && this._ctx.state === 'running') this._ctx.suspend().catch(() => {});
+  }
+
+  /** Resume the AudioContext (e.g. tab visible again). */
+  resume() {
+    if (this._ctx && this._ctx.state === 'suspended') this._ctx.resume().catch(() => {});
+  }
+
   // ── Public API ──────────────────────────────────────────
 
   /**

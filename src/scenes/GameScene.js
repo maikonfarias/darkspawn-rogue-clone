@@ -72,6 +72,16 @@ export class GameScene extends Phaser.Scene {
     this.events_bus.on(EV.PLAYER_WIN,   () => this._onVictory());
     this.events_bus.on(EV.PAUSE_GAME,   () => { this.gamePaused = true; });
     this.events_bus.on(EV.RESUME_GAME,  () => { this.gamePaused = false; });
+    this.events_bus.on('float-dmg', ({ x, y, dmg, color }) => this._showDamageNumber(x, y, dmg, color));
+
+    // Persistent graphics layers for status icons and AoE preview
+    this._statusIconGraphics = this.add.graphics().setDepth(22);
+    this._aoeGraphics        = this.add.graphics().setDepth(8);
+    // Pulse animation for status icon visibility
+    this.tweens.add({
+      targets: this._statusIconGraphics,
+      alpha: 0.5, duration: 550, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
   }
 
   update() {
@@ -100,6 +110,8 @@ export class GameScene extends Phaser.Scene {
     if (this.fogLayer)     this.fogLayer.destroy();
     if (this.overlayPanel) this.overlayPanel.destroy();
     if (this._pathGraphics) { this._pathGraphics.destroy(); this._pathGraphics = null; }
+    if (this._statusIconGraphics) this._statusIconGraphics.clear();
+    if (this._aoeGraphics) this._aoeGraphics.clear();
     this._cancelClickWalk();
 
     this.activePanel = PANEL.NONE;
@@ -294,7 +306,7 @@ export class GameScene extends Phaser.Scene {
     this.itemSprites.clear();
 
     for (const fi of this.floorItems) {
-      const key = `item-${fi.item.type ?? 'material'}`;
+      const key = `item-${fi.item.id ?? fi.item.type ?? 'material'}`;
       const spr = this.add.image(fi.x * T + T / 2, fi.y * T + T / 2, key);
       spr.setScale(0.75);
       spr.setVisible(false);
@@ -402,6 +414,17 @@ export class GameScene extends Phaser.Scene {
     this.playerHpBar.fill.setPosition(this.player.x * T, this.player.y * T + T - 4)
       .setSize(T * pHpRatio, 4);
 
+    // Status icons (burn / poison)
+    if (this._statusIconGraphics) {
+      this._statusIconGraphics.clear();
+      this._drawStatusIcons(this.player.x, this.player.y, this.player.statusEffects);
+      for (const m of this.monsters) {
+        if (!m.isDead && this.vis[m.y]?.[m.x] === VIS.VISIBLE) {
+          this._drawStatusIcons(m.x, m.y, m.statusEffects);
+        }
+      }
+    }
+
     // Depth ordering
     this.entityLayer.setDepth(10);
     this.fogLayer.setDepth(20);
@@ -467,7 +490,7 @@ export class GameScene extends Phaser.Scene {
     // Escape always opens pause menu (closing any open panel/targeting first)
     if (event.code === 'Escape') {
       if (this.activePanel !== PANEL.NONE) this._closePanel();
-      if (this.targeting) { this.targeting = false; }
+      if (this.targeting) { this._cancelTargeting(); }
       this.events_bus.emit(EV.PAUSE_GAME);
       return;
     }
@@ -553,6 +576,7 @@ export class GameScene extends Phaser.Scene {
       this.grid[ny][nx] = TILE.TRAP_VISIBLE;
       const dmg = rand(3, 8) + this.floor;
       this.player.stats.hp -= dmg;
+      this._showDamageNumber(this.player.x, this.player.y, dmg, '#ff3333');
       this.events_bus.emit(EV.LOG_MSG, { text: `You trigger a trap! -${dmg} HP.`, color: '#ff4444' });
     }
 
@@ -586,6 +610,7 @@ export class GameScene extends Phaser.Scene {
     if (!result.hit) return;
 
     SFX.play('swing');
+    this._showDamageNumber(monster.x, monster.y, result.damage, result.crit ? '#ff6600' : '#ffee33');
 
     let msg = `You hit ${monster.name} for ${result.damage}`;
     if (result.crit) msg += ' (CRIT!)';
@@ -800,7 +825,11 @@ export class GameScene extends Phaser.Scene {
       vis: this.vis,
     };
     for (const m of this.monsters) {
-      if (!m.isDead) m.update(ctx);
+      if (!m.isDead) {
+        m.update(ctx);
+        // Killed by status effect (burn/poison) during this tick — award XP + log
+        if (m.isDead) this._onMonsterDeath(m);
+      }
     }
     // Remove dead monsters and destroy their sprites
     this.monsters = this.monsters.filter(m => {
@@ -847,7 +876,8 @@ export class GameScene extends Phaser.Scene {
     this.events_bus.emit(EV.STATS_CHANGED);
 
     if (result.needsWhirlwind) {
-      // Attack all adjacent monsters
+      SFX.play('skill-whirlwind');
+      this._playSkillAnimation('whirlwind', this.player.x, this.player.y);
       let hit = false;
       for (const m of this.monsters) {
         if (!m.isDead && Math.abs(m.x - this.player.x) <= 1 && Math.abs(m.y - this.player.y) <= 1) {
@@ -858,16 +888,209 @@ export class GameScene extends Phaser.Scene {
       if (!hit) this.events_bus.emit(EV.LOG_MSG, { text: 'No adjacent enemies.', color: '#888' });
       this._endPlayerTurn();
     } else if (result.needsIceNova) {
+      SFX.play('skill-iceNova');
+      this._playSkillAnimation('iceNova', this.player.x, this.player.y);
       const visible = this.monsters.filter(m => !m.isDead && this.vis[m.y]?.[m.x] === VIS.VISIBLE);
       iceNova(visible, result.duration);
       this.events_bus.emit(EV.LOG_MSG, { text: `${visible.length} monsters frozen!`, color: '#88ddff' });
       this._endPlayerTurn();
     } else if (result.needsTarget) {
       this._startTargeting(result.needsTarget, result);
+    } else {
+      // immediate non-targeting actives (berserkerRage, arcaneShield)
+      SFX.play(`skill-${skillId === 'berserkerRage' ? 'berserker' : skillId === 'arcaneShield' ? 'arcaneShield' : skillId}`);
+      this._playSkillAnimation(skillId, this.player.x, this.player.y);
+      this._endPlayerTurn();
     }
   }
 
+  /** Play a visual effect for a skill at tile (tx, ty). Player tile used for origin of projectiles. */
+  _playSkillAnimation(skillId, tx, ty) {
+    const px = this.player.x * T + T / 2;
+    const py = this.player.y * T + T / 2;
+    const sx = tx * T + T / 2;
+    const sy = ty * T + T / 2;
+
+    switch (skillId) {
+      case 'magicBolt': {
+        // Blue bolt projectile → impact flash
+        const bolt = this.add.circle(px, py, 5, 0x4499ff).setDepth(30);
+        this.tweens.add({ targets: bolt, x: sx, y: sy, duration: 160, ease: 'Linear',
+          onComplete: () => {
+            bolt.destroy();
+            const flash = this.add.circle(sx, sy, 8, 0xaaddff, 0.9).setDepth(30);
+            this.tweens.add({ targets: flash, scaleX: 2.5, scaleY: 2.5, alpha: 0, duration: 220,
+              onComplete: () => flash.destroy() });
+          }
+        });
+        break;
+      }
+      case 'fireball': {
+        // Orange projectile → expanding explosion
+        const proj = this.add.circle(px, py, 7, 0xff6600).setDepth(30);
+        this.tweens.add({ targets: proj, x: sx, y: sy, duration: 180, ease: 'Linear',
+          onComplete: () => {
+            proj.destroy();
+            const boom = this.add.circle(sx, sy, 12, 0xff4400, 0.9).setDepth(30);
+            const glow = this.add.circle(sx, sy, 22, 0xff8800, 0.5).setDepth(29);
+            this.tweens.add({ targets: [boom, glow], scaleX: 2.8, scaleY: 2.8, alpha: 0, duration: 380,
+              onComplete: () => { boom.destroy(); glow.destroy(); } });
+          }
+        });
+        break;
+      }
+      case 'iceNova': {
+        // Twin expanding rings from player
+        const ring1 = this.add.circle(sx, sy, 10, 0x66eeff, 0.85).setDepth(30);
+        const ring2 = this.add.circle(sx, sy, 6, 0xaaffff, 0.60).setDepth(30);
+        this.tweens.add({ targets: ring1, scaleX: 7, scaleY: 7, alpha: 0, duration: 520, ease: 'Quad.out',
+          onComplete: () => ring1.destroy() });
+        this.time.delayedCall(90, () => {
+          this.tweens.add({ targets: ring2, scaleX: 5, scaleY: 5, alpha: 0, duration: 420, ease: 'Quad.out',
+            onComplete: () => ring2.destroy() });
+        });
+        break;
+      }
+      case 'arcaneShield': {
+        // Pulsing purple ring around player
+        const g = this.add.graphics().setDepth(30);
+        let alpha = 1.0;
+        const pulse = this.time.addEvent({ delay: 60, repeat: 8, callback: () => {
+          g.clear();
+          g.lineStyle(3, 0xbb66ff, alpha);
+          g.strokeCircle(px, py, 22);
+          g.lineStyle(1, 0xdd99ff, alpha * 0.5);
+          g.strokeCircle(px, py, 30);
+          alpha -= 0.1;
+          if (alpha <= 0) { g.destroy(); pulse.remove(); }
+        }});
+        break;
+      }
+      case 'berserkerRage': {
+        // Red expanding burst around player
+        const g = this.add.graphics().setDepth(30);
+        g.fillStyle(0xff2200, 0.55);
+        g.fillCircle(px, py, 28);
+        this.tweens.add({ targets: g, scaleX: 1.6, scaleY: 1.6, alpha: 0, duration: 380,
+          onComplete: () => g.destroy() });
+        break;
+      }
+      case 'whirlwind': {
+        // Spinning ring that expands briefly
+        const g = this.add.graphics().setDepth(30);
+        let angle = 0;
+        const spin = this.time.addEvent({ delay: 28, repeat: 14, callback: () => {
+          g.clear();
+          g.lineStyle(2.5, 0x88ff44, 0.9 - angle / 400);
+          g.strokeCircle(px, py, 24 + angle * 0.3);
+          g.lineStyle(1.5, 0xccff88, 0.6 - angle / 600);
+          g.strokeCircle(px, py, 16 + angle * 0.2);
+          angle += 26;
+          if (angle > 360) { g.destroy(); spin.remove(); }
+        }});
+        break;
+      }
+      case 'shadowStep': {
+        // Dark fade at origin → bright appear at destination
+        const orig = this.add.circle(px, py, 20, 0x111133, 0.75).setDepth(30);
+        this.tweens.add({ targets: orig, scaleX: 0.1, scaleY: 0.1, alpha: 0, duration: 220,
+          onComplete: () => orig.destroy() });
+        this.time.delayedCall(100, () => {
+          const dest = this.add.circle(sx, sy, 20, 0x4466ff, 0.7).setDepth(30);
+          this.tweens.add({ targets: dest, scaleX: 0.2, scaleY: 0.2, alpha: 0, duration: 300,
+            onComplete: () => dest.destroy() });
+        });
+        break;
+      }
+      case 'deathMark': {
+        // Dark-purple flash on target
+        const g = this.add.graphics().setDepth(30);
+        g.fillStyle(0x990099, 0.75);
+        g.fillCircle(sx, sy, 18);
+        this.tweens.add({ targets: g, scaleX: 1.9, scaleY: 1.9, alpha: 0, duration: 420,
+          onComplete: () => g.destroy() });
+        break;
+      }
+      default: break;
+    }
+  }
+
+  // ── Targeting ───────────────────────────────────────────────────────────────
+
+  /**
+   * Enter visual targeting mode for a pre-selected skill.
+   * MP is NOT consumed here — it is consumed when the player confirms the tile.
+   */
+  _enterTargetingMode(skillId) {
+    this._cancelTargeting(false);
+    const def = SKILL_BY_ID[skillId];
+    this.targeting = true;
+    this.targetMode = skillId;
+    this.targetExtra = {
+      skillId,
+      pendingCast: true,
+      baseDmg:  def?.active?.baseDmg,
+      radius:   def?.active?.radius,
+      duration: def?.active?.duration,
+    };
+    this._targetCursor = this.add.rectangle(0, 0, T, T, 0x44ff88, 0.22)
+      .setVisible(false).setDepth(25);
+    this.input.on('pointermove', this._onTargetMove, this);
+  }
+
+  // ── Floating damage numbers ─────────────────────────────────────────────────
+
+  _showDamageNumber(tileX, tileY, amount, color = '#ffee33') {
+    const wx = tileX * T + T / 2;
+    const wy = tileY * T;
+    const txt = this.add.text(wx, wy, String(amount), {
+      fontFamily: 'Courier New',
+      fontSize: '14px',
+      color,
+      stroke: '#000000',
+      strokeThickness: 3,
+    }).setOrigin(0.5, 1).setDepth(40);
+    this.tweens.add({
+      targets: txt,
+      y: wy - 28,
+      alpha: 0,
+      duration: 900,
+      ease: 'Quad.out',
+      onComplete: () => txt.destroy(),
+    });
+  }
+
+  // ── Status icon drawing ────────────────────────────────────────────────────
+
+  /** Draw small coloured dots in the bottom-right corner of a tile for each active DoT. */
+  _drawStatusIcons(tx, ty, effects) {
+    if (!effects?.length || !this._statusIconGraphics) return;
+    const g = this._statusIconGraphics;
+    let i = 0;
+    for (const eff of effects) {
+      let color = null;
+      if (eff.type === 'burn')   color = 0xff6600;
+      if (eff.type === 'poison') color = 0x22dd44;
+      if (color === null) continue;
+      // Stack dots upward from bottom-right corner of the tile
+      g.fillStyle(color, 1);
+      g.fillRect(tx * T + T - 7, ty * T + T - 7 - i * 8, 6, 6);
+      i++;
+    }
+  }
+
+  // ── Targeting ───────────────────────────────────────────────────────────────
+
+  _cancelTargeting(emitEvent = true) {
+    if (this._targetCursor) { this._targetCursor.destroy(); this._targetCursor = null; }
+    this.input.off('pointermove', this._onTargetMove, this);
+    this.targeting = false;
+    if (this._aoeGraphics) this._aoeGraphics.clear();
+    if (emitEvent) this.events_bus?.emit('skill-selection-done');
+  }
+
   _startTargeting(mode, extra) {
+    this._cancelTargeting(false); // clear any previous targeting session
     this.targeting = true;
     this.targetMode = mode;
     this.targetExtra = extra;
@@ -886,6 +1109,20 @@ export class GameScene extends Phaser.Scene {
     const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
     if (this._targetCursor) {
       this._targetCursor.setPosition(tx * T + T / 2, ty * T + T / 2).setVisible(true);
+    }
+    // Fireball AoE preview (radius 1 = 3×3 tiles)
+    if (this._aoeGraphics) {
+      this._aoeGraphics.clear();
+      if (this.targetMode === 'fireball') {
+        this._aoeGraphics.lineStyle(1, 0xff8800, 0.7);
+        this._aoeGraphics.fillStyle(0xff5500, 0.18);
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            this._aoeGraphics.fillRect((tx + dx) * T, (ty + dy) * T, T, T);
+            this._aoeGraphics.strokeRect((tx + dx) * T, (ty + dy) * T, T, T);
+          }
+        }
+      }
     }
   }
 
@@ -977,6 +1214,7 @@ export class GameScene extends Phaser.Scene {
 
   _onPointerDown(ptr) {
     if (ptr.rightButtonDown()) return;
+    if (this._panelJustClosed) return;  // panel button click should not propagate to walk
     if (!this.targeting) {
       // Click-to-walk: ignore clicks over UI panels
       if (this.activePanel !== PANEL.NONE) return;
@@ -1002,38 +1240,63 @@ export class GameScene extends Phaser.Scene {
     if (this._targetCursor) { this._targetCursor.destroy(); this._targetCursor = null; }
     this.input.off('pointermove', this._onTargetMove, this);
     this.targeting = false;
+    if (this._aoeGraphics) this._aoeGraphics.clear();
 
-    const mode  = this.targetMode;
-    const extra = this.targetExtra;
+    const mode = this.targetMode;
+    let   extra = this.targetExtra;
+
+    // If skill was pre-selected (MP not yet spent), consume mana now
+    if (extra?.pendingCast) {
+      const res = useSkill(this.player, extra.skillId);
+      if (!res.success) {
+        this.events_bus.emit(EV.LOG_MSG, { text: res.message, color: '#ff8888' });
+        this.events_bus.emit('skill-selection-done');
+        return;
+      }
+      this.events_bus.emit(EV.LOG_MSG, { text: res.message, color: '#aa88ff' });
+      this.events_bus.emit(EV.STATS_CHANGED);
+      extra = { ...extra, ...res, pendingCast: false };
+    }
 
     if (mode === 'magicBolt') {
       const m = this.monsters.find(mon => mon.x === tx && mon.y === ty && !mon.isDead);
       if (m) {
+        SFX.play('skill-magicBolt');
+        this._playSkillAnimation('magicBolt', tx, ty);
         const dmg = magicBoltDamage(this.player, m, extra.baseDmg, this.player.level);
+        this._showDamageNumber(m.x, m.y, dmg, '#88aaff');
         this.events_bus.emit(EV.LOG_MSG, { text: `Magic Bolt hits ${m.name} for ${dmg}!`, color: '#8888ff' });
         if (m.isDead) this._onMonsterDeath(m);
       } else {
         this.events_bus.emit(EV.LOG_MSG, { text: 'Missed!', color: '#888' });
       }
     } else if (mode === 'fireball') {
+      SFX.play('skill-fireball');
+      this._playSkillAnimation('fireball', tx, ty);
       const hits = fireballDamage(this.player, this.monsters, tx, ty, extra.baseDmg, this.player.level, this.events_bus);
       this.events_bus.emit(EV.LOG_MSG, { text: `Fireball! ${hits.length} enemies hit.`, color: '#ff8800' });
-      for (const { entity } of hits) {
+      for (const { entity, damage } of hits) {
+        this._showDamageNumber(entity.x, entity.y, damage, '#ff6600');
         if (entity.isDead) this._onMonsterDeath(entity);
       }
     } else if (mode === 'shadowStep') {
       if (this.vis[ty]?.[tx] === VIS.VISIBLE && this.grid[ty][tx] !== TILE.WALL) {
+        SFX.play('skill-shadowStep');
+        this._playSkillAnimation('shadowStep', tx, ty);
         this.player.x = tx; this.player.y = ty;
         this.events_bus.emit(EV.LOG_MSG, { text: 'Shadow Step!', color: '#88ff88' });
       }
     } else if (mode === 'deathMark') {
       const m = this.monsters.find(mon => mon.x === tx && mon.y === ty && !mon.isDead);
       if (m) {
+        SFX.play('skill-deathMark');
+        this._playSkillAnimation('deathMark', tx, ty);
         applyStatus(m, 'deathMark', 10);
         this.events_bus.emit(EV.LOG_MSG, { text: `${m.name} is marked for death!`, color: '#ff44ff' });
       }
     }
 
+    this.events_bus.emit('skill-selection-done'); // notify UIScene to clear hotbar selection
     this._endPlayerTurn();
   }
 
@@ -1058,6 +1321,9 @@ export class GameScene extends Phaser.Scene {
   _closePanel() {
     this.activePanel = PANEL.NONE;
     if (this.overlayPanel) { this.overlayPanel.destroy(); this.overlayPanel = null; }
+    // Prevent the same click from immediately triggering click-to-walk
+    this._panelJustClosed = true;
+    this.time.delayedCall(80, () => { this._panelJustClosed = false; });
   }
 
   _panelBase(W, H, title) {
@@ -1107,7 +1373,7 @@ export class GameScene extends Phaser.Scene {
         .setStrokeStyle(1, 0x445577).setInteractive();
       this._addText(panel, eq.x + 2, eq.y + 2, eq.label, '#445566', 9);
       if (item) {
-        const icon = this.add.image(eq.x + SLOT_SIZE / 2, eq.y + SLOT_SIZE / 2, `item-${item.type}`)
+        const icon = this.add.image(eq.x + SLOT_SIZE / 2, eq.y + SLOT_SIZE / 2, `item-${item.id ?? item.type}`)
           .setScale(0.9);
         panel.add([box, icon]);
       } else {
@@ -1130,7 +1396,7 @@ export class GameScene extends Phaser.Scene {
         .setStrokeStyle(1, 0x334455).setInteractive();
       panel.add(box);
       if (item) {
-        const icon = this.add.image(ix + SLOT_SIZE / 2, iy + SLOT_SIZE / 2 - 6, `item-${item.type}`)
+        const icon = this.add.image(ix + SLOT_SIZE / 2, iy + SLOT_SIZE / 2 - 6, `item-${item.id ?? item.type}`)
           .setScale(0.75);
         const qtyTxt = this.add.text(ix + SLOT_SIZE - 4, iy + SLOT_SIZE - 14,
           item.qty > 1 ? String(item.qty) : '', {
