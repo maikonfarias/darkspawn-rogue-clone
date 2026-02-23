@@ -2,6 +2,7 @@
 //  Darkspawn Rogue Quest — Game Over / Victory Scene
 // ============================================================
 import { SCENE, C } from '../data/Constants.js';
+import { Music } from '../systems/ProceduralMusic.js';
 
 export class GameOverScene extends Phaser.Scene {
   constructor() { super({ key: SCENE.GAMEOVER }); }
@@ -13,6 +14,8 @@ export class GameOverScene extends Phaser.Scene {
   create() {
     const { width: W, height: H } = this.cameras.main;
     this.cameras.main.setBackgroundColor('#0a0a0f');
+    // Ensure music is stopped (covers edge cases)
+    Music.stop(1.5);
 
     const won   = this.data_in.won   ?? false;
     const floor = this.data_in.floor ?? 1;

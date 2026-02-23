@@ -18,6 +18,8 @@ import { findPath } from '../systems/AStarPathfinder.js';
 import { SKILL_TREES, SKILL_BY_ID } from '../data/SkillData.js';
 import { RECIPES } from '../data/RecipeData.js';
 import { saveGame, loadGame } from '../systems/SaveSystem.js';
+import { Music, themeForFloor } from '../systems/ProceduralMusic.js';
+import { SFX } from '../systems/SoundEffects.js';
 
 const T = TILE_SIZE;
 
@@ -50,6 +52,7 @@ export class GameScene extends Phaser.Scene {
     this._floorEndPos   = null;
     this._clickPath      = [];
     this._clickWalkTimer = null;
+    this._prevVisibleMonsters = new Set();
 
     this._setupInput();
 
@@ -60,6 +63,9 @@ export class GameScene extends Phaser.Scene {
     } else {
       this._loadFloor(this.floor);
     }
+
+    // Start dungeon music (user already clicked a button to reach this scene)
+    Music.play(themeForFloor(this.floor));
 
     // Listen for events from UIScene
     this.events_bus.on(EV.PLAYER_DIED,  () => this._onDeath());
@@ -97,6 +103,7 @@ export class GameScene extends Phaser.Scene {
     this._cancelClickWalk();
 
     this.activePanel = PANEL.NONE;
+    this._prevVisibleMonsters = new Set(); // reset so new floor monsters trigger roar
 
     // ── Restore cached floor or generate fresh ──────────────
     const cached = this.floorCache.get(floorNum);
@@ -167,6 +174,9 @@ export class GameScene extends Phaser.Scene {
         text: '⚠ You sense an overwhelming evil presence...', color: '#ff44ff'
       });
     }
+
+    // Adapt music atmosphere to the new floor depth
+    Music.setTheme(themeForFloor(floorNum));
   }
 
   // ── Spawning ─────────────────────────────────────────────
@@ -360,6 +370,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Monsters
+    const _nowVisible = new Set();
     for (const m of this.monsters) {
       const entry = this.monsterSprites.get(m);
       if (!entry) continue;
@@ -371,11 +382,16 @@ export class GameScene extends Phaser.Scene {
       }
       const v = this.vis[m.y][m.x];
       const visible = v === VIS.VISIBLE;
+      if (visible) {
+        _nowVisible.add(m);
+        if (!this._prevVisibleMonsters.has(m)) SFX.play('roar'); // new monster spotted
+      }
       spr.setPosition(m.x * T + T / 2, m.y * T + T / 2).setVisible(visible);
       hpBg.setPosition(m.x * T, m.y * T - 6).setVisible(visible);
       const hpRatio = Math.max(0, m.stats.hp / m.stats.maxHp);
       hpFill.setPosition(m.x * T, m.y * T - 6).setSize(T * hpRatio, 4).setVisible(visible);
     }
+    this._prevVisibleMonsters = _nowVisible;
 
     // Player sprite
     this.playerSprite.setPosition(this.player.x * T + T / 2, this.player.y * T + T / 2);
@@ -528,6 +544,7 @@ export class GameScene extends Phaser.Scene {
     if (t === TILE.DOOR) {
       this.grid[ny][nx] = TILE.FLOOR;
       this.tileSprites[ny][nx].setTexture('tile-floor');
+      SFX.play('door');
       this.events_bus.emit(EV.LOG_MSG, { text: 'You open the door.', color: '#ccaa88' });
     }
 
@@ -553,6 +570,9 @@ export class GameScene extends Phaser.Scene {
     // Auto-pickup all items on this tile
     const itemsHere = this.floorItems.filter(f => f.x === nx && f.y === ny);
     for (const fi of itemsHere) {
+      if (fi.item.type === ITEM_TYPE.GOLD)   SFX.play('coin');
+      else if (fi.item.type === ITEM_TYPE.POTION) SFX.play('potion');
+      else SFX.play('equip');
       this.player.pickUpItem(fi.item);
       this.floorItems.splice(this.floorItems.indexOf(fi), 1);
     }
@@ -564,6 +584,8 @@ export class GameScene extends Phaser.Scene {
   _playerAttack(monster) {
     const result = resolveAttack(this.player, monster, this.events_bus);
     if (!result.hit) return;
+
+    SFX.play('swing');
 
     let msg = `You hit ${monster.name} for ${result.damage}`;
     if (result.crit) msg += ' (CRIT!)';
@@ -643,6 +665,9 @@ export class GameScene extends Phaser.Scene {
       this.events_bus.emit(EV.LOG_MSG, { text: 'Nothing to pick up.', color: '#556677' });
       return;
     }
+    if (fi.item.type === ITEM_TYPE.GOLD)        SFX.play('coin');
+    else if (fi.item.type === ITEM_TYPE.POTION) SFX.play('potion');
+    else SFX.play('equip');
     this.player.pickUpItem(fi.item);
     this.floorItems.splice(this.floorItems.indexOf(fi), 1);
     this._rebuildItemSprites();
@@ -717,6 +742,7 @@ export class GameScene extends Phaser.Scene {
       this.events_bus.emit(EV.LOG_MSG, { text: 'This is the deepest floor.', color: '#556677' });
       return;
     }
+    SFX.play('stairs-down');
     this._saveCurrentFloor();
     this.floor++;
     this._loadFloor(this.floor, false);
@@ -731,12 +757,14 @@ export class GameScene extends Phaser.Scene {
       this.events_bus.emit(EV.LOG_MSG, { text: 'You are already on the first floor.', color: '#556677' });
       return;
     }
+    SFX.play('stairs-up');
     this._saveCurrentFloor();
     this.floor--;
     this._loadFloor(this.floor, true);
   }
 
   _openChest(x, y) {
+    SFX.play('chest');
     this.grid[y][x] = TILE.CHEST_OPEN;
     this.tileSprites[y][x].setTexture('tile-chest-open');
     const numItems = rand(1, 3);
@@ -1086,7 +1114,7 @@ export class GameScene extends Phaser.Scene {
         panel.add(box);
       }
       box.on('pointerdown', () => {
-        if (item) { this.player.unequipItem(eq.slot); this._openPanel(PANEL.INVENTORY); }
+        if (item) { SFX.play('equip'); this.player.unequipItem(eq.slot); this._openPanel(PANEL.INVENTORY); }
       });
     }
 
@@ -1144,7 +1172,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this._selectedSlot === i) {
-      // Second click: use/equip
+      // Second click: use/equip — play matching pickup sound first
+      const item = this.player.inventory[i];
+      if (item) {
+        if (item.type === ITEM_TYPE.POTION)  SFX.play('potion');
+        else if (item.type === ITEM_TYPE.GOLD) SFX.play('coin');
+        else SFX.play('equip');
+      }
       const result = this.player.useItem(i);
       if (result?.scrollEffect) {
         this._applyScrollEffect(result.scrollEffect);
@@ -1329,6 +1363,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   _onDeath() {
+    Music.stop(2.0);
     this.scene.stop(SCENE.UI);
     this.scene.start(SCENE.GAMEOVER, {
       won: false,
@@ -1339,6 +1374,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   _onVictory() {
+    Music.stop(2.0);
     this.scene.stop(SCENE.UI);
     this.scene.start(SCENE.GAMEOVER, {
       won: true,

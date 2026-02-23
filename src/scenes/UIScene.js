@@ -5,6 +5,8 @@
 import { SCENE, EV, C, VIS, TILE, MAP_W, MAP_H } from '../data/Constants.js';
 import { XP_TABLE } from '../data/Constants.js';
 import { saveGame } from '../systems/SaveSystem.js';
+import { Music } from '../systems/ProceduralMusic.js';
+import { SFX } from '../systems/SoundEffects.js';
 
 const MM_SCALE = 2;   // pixels per tile on minimap
 const MM_X    = 6;    // minimap top-left X
@@ -229,6 +231,9 @@ export class UIScene extends Phaser.Scene {
     } else {
       // Second click: use / equip
       slot._selectedOnce = false;
+      if (item.type === 'potion')   SFX.play('potion');
+      else if (item.type === 'gold') SFX.play('coin');
+      else SFX.play('equip');
       const result = gs.player.useItem(slot.index);
       if (result?.scrollEffect) gs._applyScrollEffect(result.scrollEffect);
       if (result) gs._endPlayerTurn?.();
@@ -408,7 +413,7 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0).setDepth(50).setInteractive());
 
     // Panel box
-    const PW = 380, PH = 330;
+    const PW = 380, PH = 400;
     add(this.add.rectangle(W / 2, H / 2, PW, PH, 0x0a0a14, 0.97)
       .setScrollFactor(0).setDepth(51).setStrokeStyle(2, 0x334466));
 
@@ -445,6 +450,26 @@ export class UIScene extends Phaser.Scene {
       this.scene.stop(SCENE.GAME);
       this.scene.start(SCENE.MENU);
     });
+
+    // ── Audio toggles ────────────────────────────────────────
+    add(this.add.text(W / 2, H / 2 + 188, '── Audio ──', {
+      fontFamily: 'Courier New', fontSize: '13px', color: '#445566',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(52));
+
+    const mkToggle = (label, x, stateFn, action) => {
+      const btn = add(this.add.text(x, H / 2 + 215, label + (stateFn() ? 'ON' : 'OFF'), {
+        fontFamily: 'Courier New', fontSize: '14px', color: '#88aacc',
+        backgroundColor: '#111122', padding: { x: 12, y: 7 },
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(52).setInteractive({ useHandCursor: true }));
+      btn.on('pointerover', () => btn.setAlpha(0.75));
+      btn.on('pointerout',  () => btn.setAlpha(1));
+      btn.on('pointerdown', () => { action(); btn.setText(label + (stateFn() ? 'ON' : 'OFF')); });
+      return btn;
+    };
+    mkToggle('♪ MUSIC: ', W / 2 - 72, () => Music.isPlaying,
+      () => { if (Music.isPlaying) Music.stop(0.5); else Music.play('shallow'); });
+    mkToggle('🔊 SFX: ',  W / 2 + 72, () => !SFX.muted,
+      () => { SFX.muted = !SFX.muted; });
 
     // Escape key resumes
     this._pauseEscHandler = () => this.bus.emit(EV.RESUME_GAME);

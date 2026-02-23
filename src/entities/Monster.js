@@ -6,6 +6,7 @@ import { rand, chance, pick } from '../utils/Random.js';
 import { nextStep } from '../systems/AStarPathfinder.js';
 import { resolveAttack, tickStatusEffects } from '../systems/CombatSystem.js';
 import { isPassable } from '../systems/DungeonGenerator.js';
+import { SFX } from '../systems/SoundEffects.js';
 
 export class Monster {
   constructor(def, x, y, floorNum) {
@@ -122,6 +123,8 @@ export class Monster {
 
     const result = resolveAttack(this, player, events);
     if (!result.hit) return;
+
+    SFX.play('hit');
 
     let msg = `${this.name} hits you for ${result.damage} damage`;
     if (result.crit) msg += ' (CRITICAL!)';

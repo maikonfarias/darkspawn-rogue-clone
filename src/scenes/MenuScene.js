@@ -3,6 +3,8 @@
 // ============================================================
 import { SCENE, C } from '../data/Constants.js';
 import { hasSave, saveTimestamp } from '../systems/SaveSystem.js';
+import { Music } from '../systems/ProceduralMusic.js';
+import { SFX } from '../systems/SoundEffects.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super({ key: SCENE.MENU }); }
@@ -62,6 +64,7 @@ export class MenuScene extends Phaser.Scene {
     if (hasSaveFile) {
       const ts = saveTimestamp();
       this._makeButton(W / 2, H / 2 - 30, '  [ CONTINUE ]  ', '#88ffcc', '#001a10', () => {
+        Music.stop(1.5);
         this.scene.start(SCENE.GAME, { loadSave: true });
         this.scene.launch(SCENE.UI);
       });
@@ -73,6 +76,7 @@ export class MenuScene extends Phaser.Scene {
     }
 
     this._makeButton(W / 2, H / 2 + 30 + btnOffset, '  [ NEW GAME ]  ', '#ffd700', '#221100', () => {
+      Music.stop(1.5);
       this.scene.start(SCENE.GAME);
       this.scene.launch(SCENE.UI);
     });
@@ -100,6 +104,30 @@ export class MenuScene extends Phaser.Scene {
     this.add.text(8, H - 18, 'v1.0', {
       fontFamily: 'Courier New', fontSize: '11px', color: '#334455'
     });
+
+    // ── Audio toggle buttons (bottom-right) ─────────────────
+    const mkAudioBtn = (x, y, labelFn, onClick) => {
+      const btn = this.add.text(x, y, labelFn(), {
+        fontFamily: 'Courier New', fontSize: '12px', color: '#556677',
+        backgroundColor: '#0d1117', padding: { x: 8, y: 4 },
+      }).setOrigin(1, 1).setInteractive({ useHandCursor: true });
+      btn.on('pointerover', () => btn.setColor('#88aacc'));
+      btn.on('pointerout',  () => btn.setColor('#556677'));
+      btn.on('pointerdown', () => { onClick(); btn.setText(labelFn()); });
+      return btn;
+    };
+    mkAudioBtn(W - 6,      H - 6, () => `♪ MUSIC: ${Music.isPlaying ? 'ON' : 'OFF'}`,
+      () => { if (Music.isPlaying) Music.stop(0.5); else Music.play('menu'); });
+    mkAudioBtn(W - 6 - 130, H - 6, () => `🔊 SFX: ${SFX.muted ? 'OFF' : 'ON'}`,
+      () => { SFX.muted = !SFX.muted; });
+
+    // Start ambient menu music on first pointer interaction
+    // (required by browser autoplay policy)
+    this.input.once('pointerdown', () => {
+      if (!Music.isPlaying) Music.play('menu');
+    });
+    // Also try immediately in case the context was already unlocked
+    Music.play('menu');
   }
 
   update() {
