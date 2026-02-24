@@ -20,6 +20,13 @@ const MM_Y    = 6;    // minimap top-left Y
 const MM_W    = MAP_W * MM_SCALE;  // 160
 const MM_H    = MAP_H * MM_SCALE;  // 100
 
+// Portrait HUD zone heights – must match _buildHUD_portrait definitions
+const PORTRAIT_STATS_H  = 88;                          // top stats bar
+const PORTRAIT_LOG_H    = 40;
+const PORTRAIT_HOTBAR_H = 46;
+const PORTRAIT_DPAD_H   = 106;
+const PORTRAIT_BOTTOM_H = PORTRAIT_LOG_H + PORTRAIT_HOTBAR_H + PORTRAIT_DPAD_H; // 192
+
 export class UIScene extends Phaser.Scene {
   constructor() { super({ key: SCENE.UI }); }
 
@@ -1340,11 +1347,11 @@ export class UIScene extends Phaser.Scene {
 
   _buildHUD_portrait(W, H) {
     // ── Zone heights ─────────────────────────────────────────
-    const STATS_H  = 88;   // compact stats bar at top
-    const LOG_H    = 40;   // message log
-    const HOTBAR_H = 46;   // skill hotbar
-    const DPAD_H   = 106;  // d-pad + action buttons
-    const BOTTOM_H = LOG_H + HOTBAR_H + DPAD_H;
+    const STATS_H  = PORTRAIT_STATS_H;   // compact stats bar at top
+    const LOG_H    = PORTRAIT_LOG_H;     // message log
+    const HOTBAR_H = PORTRAIT_HOTBAR_H;  // skill hotbar
+    const DPAD_H   = PORTRAIT_DPAD_H;    // d-pad + action buttons
+    const BOTTOM_H = PORTRAIT_BOTTOM_H;
 
     const LOG_Y    = H - BOTTOM_H;
     const HOTBAR_Y = LOG_Y + LOG_H;
@@ -1583,11 +1590,11 @@ export class UIScene extends Phaser.Scene {
   _showPanel(type) {
     this._hidePanel();
 
-    const W       = this.cameras.main.width;   // 480
-    const H       = this.cameras.main.height;  // 854
-    const HUD_TOP = 88;   // stats bar  – keep in sync with _buildHUD_portrait STATS_H
-    const HUD_BOT = 192;  // bottom HUD – keep in sync with _buildHUD_portrait BOTTOM_H
-    const availH  = H - HUD_TOP - HUD_BOT;    // 574 px
+    const W       = this.cameras.main.width;
+    const H       = this.cameras.main.height;
+    const HUD_TOP = PORTRAIT_STATS_H;
+    const HUD_BOT = PORTRAIT_BOTTOM_H;
+    const availH  = H - HUD_TOP - HUD_BOT;
     const MARG    = 8;
     const PW      = W - MARG * 2;                         // 464 px
     const PH      = Math.min(560, availH - MARG * 2);     // ≤ 558 px
@@ -1687,7 +1694,7 @@ export class UIScene extends Phaser.Scene {
             this.add.image(eqX + EQ_SZ / 2, curY + EQ_LABEL_H + EQ_SZ / 2,
               `item-${item.id ?? item.type}`).setScale(0.85).setScrollFactor(0)
           );
-        } catch (e) { /* icon texture missing */ }
+        } catch (e) { console.warn(`[UIScene] Missing item texture: item-${item.id ?? item.type}`); }
         this._pText(eqX + EQ_SZ / 2, curY + EQ_LABEL_H + EQ_SZ + 1,
           item.name, '#aabbcc', 8).setOrigin(0.5, 0);
       } else {
@@ -1732,7 +1739,7 @@ export class UIScene extends Phaser.Scene {
             this.add.image(sx + SL_SZ / 2, sy + SL_SZ / 2 - 2,
               `item-${item.id ?? item.type}`).setScale(0.75).setScrollFactor(0)
           );
-        } catch (e) { /* icon texture missing */ }
+        } catch (e) { console.warn(`[UIScene] Missing item texture: item-${item.id ?? item.type}`); }
         if (item.qty > 1) {
           this._pText(sx + SL_SZ - 2, sy + SL_SZ - 12, String(item.qty), '#aaaacc', 9)
             .setOrigin(1, 0);
@@ -1842,8 +1849,8 @@ export class UIScene extends Phaser.Scene {
         const bdClr = unlocked ? 0x44aa44 : canUnlock ? 0x334466  : 0x1a1a2a;
 
         const doUnlock = () => {
-          const gs2 = this.scene.get(SCENE.GAME);
-          if (gs2) gs2._tryUnlockSkill(skill.id);
+          const gs = this.scene.get(SCENE.GAME);
+          if (gs) gs._tryUnlockSkill(skill.id);
         };
 
         const card = this._pAdd(
@@ -1859,14 +1866,13 @@ export class UIScene extends Phaser.Scene {
               .setDisplaySize(18, 18).setScrollFactor(0)
               .setTint(unlocked ? 0xffffff : canUnlock ? 0x8899cc : 0x444466)
           );
-        } catch (e) { /* icon missing */ }
+        } catch (e) { console.warn(`[UIScene] Missing skill texture: skill-${skill.id}`); }
 
         const nameClr = unlocked ? '#88ff88' : canUnlock ? '#88aacc' : '#445566';
         this._pText(cx + 26, sy + 2,  skill.name, nameClr, 9);
-        const isActive = !!skill.active;
         this._pText(cx + 26, sy + 14,
-          isActive ? `[${skill.active.cost}mp]` : '[passive]',
-          isActive ? '#5566aa' : '#446644', 8);
+          skill.active ? `[${skill.active.cost}mp]` : '[passive]',
+          skill.active ? '#5566aa' : '#446644', 8);
         this._pText(cx + 4, sy + 28, skill.description, '#556677', 8, colW - 8);
 
         if (unlocked) {
@@ -1924,8 +1930,8 @@ export class UIScene extends Phaser.Scene {
         const btn = this._pText(bx + PW - 14, ry + 12, '[CRAFT]', '#ffd700', 11)
           .setOrigin(1, 0.5).setInteractive({ useHandCursor: true });
         btn.on('pointerdown', () => {
-          const gs2 = this.scene.get(SCENE.GAME);
-          if (gs2) gs2._tryCraft(recipe.id);
+          const gs = this.scene.get(SCENE.GAME);
+          if (gs) gs._tryCraft(recipe.id);
         });
       }
     });
