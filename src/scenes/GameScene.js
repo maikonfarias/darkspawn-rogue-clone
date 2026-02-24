@@ -54,6 +54,10 @@ export class GameScene extends Phaser.Scene {
     this._clickPath      = [];
     this._clickWalkTimer = null;
     this._prevVisibleMonsters = new Set();
+    // Town portal state
+    this._portalReturn = null;  // { floorNum, px, py } — where to return in the dungeon
+    this._portalPos    = null;  // { x, y } — portal tile position in town
+    this._portalSprite = null;  // Phaser Image for the blue portal visual
 
     this._setupInput();
 
@@ -114,6 +118,10 @@ export class GameScene extends Phaser.Scene {
     if (this._statusIconGraphics) this._statusIconGraphics.clear();
     if (this._aoeGraphics) this._aoeGraphics.clear();
     this._cancelClickWalk();
+    // Destroy portal sprite whenever floors change
+    if (this._portalSprite) { this._portalSprite.destroy(); this._portalSprite = null; }
+    // Clear portal data when entering a dungeon floor (portal only lives in town)
+    if (floorNum > 0) { this._portalReturn = null; this._portalPos = null; }
 
     this.activePanel = PANEL.NONE;
     this._prevVisibleMonsters = new Set(); // reset so new floor monsters trigger roar
@@ -243,8 +251,8 @@ export class GameScene extends Phaser.Scene {
       const entry = weightedPick(table);
       if (!entry) continue;
       const def = ITEMS[entry.id];
-      // Equipment items should never stack — always qty 1
-      const qty = def?.slot ? 1 : rand(1, 3);
+      // Equipment items and singleDrop items always spawn as qty 1
+      const qty = (def?.slot || def?.singleDrop) ? 1 : rand(1, 3);
       const item = createItem(entry.id, qty);
       this.floorItems.push({ x: spawn.x, y: spawn.y, item });
     }
@@ -401,6 +409,12 @@ export class GameScene extends Phaser.Scene {
       if (!spr) continue;
       const v = this.vis[fi.y][fi.x];
       spr.setVisible(v === VIS.VISIBLE);
+    }
+
+    // Town portal sprite
+    if (this._portalSprite && this._portalPos) {
+      const v = this.vis[this._portalPos.y][this._portalPos.x];
+      this._portalSprite.setVisible(v === VIS.VISIBLE);
     }
 
     // Monsters
@@ -612,6 +626,13 @@ export class GameScene extends Phaser.Scene {
     // Move
     this.player.x = nx;
     this.player.y = ny;
+
+    // Check if the player stepped onto the town portal
+    if (this.floor === 0 && this._portalReturn && this._portalPos &&
+        nx === this._portalPos.x && ny === this._portalPos.y) {
+      this._useTownPortal();
+      return;
+    }
 
     // Check for adjacent NPC in town
     this._checkNPCAdjacency();
@@ -1589,6 +1610,54 @@ export class GameScene extends Phaser.Scene {
     if (eff.fireball) {
       this._startTargeting('fireball', { baseDmg: 15, radius: 1 });
     }
+    if (eff.townPortal) {
+      if (this.floor === 0) {
+        this.events_bus.emit(EV.LOG_MSG, { text: 'You are already in town.', color: '#556677' });
+        return;
+      }
+      SFX.play('townScroll');
+      const returnFloor = this.floor;
+      const returnX = this.player.x;
+      const returnY = this.player.y;
+      this._saveCurrentFloor();
+      this.floor = 0;
+      this._loadFloor(0);
+      // Place the blue portal at the town start position
+      this._portalReturn = { floorNum: returnFloor, px: returnX, py: returnY };
+      this._portalPos    = { x: this._floorStartPos.x, y: this._floorStartPos.y };
+      this._portalSprite = this.add.image(
+        this._portalPos.x * T + T / 2,
+        this._portalPos.y * T + T / 2,
+        'town-portal'
+      ).setDepth(5).setAlpha(0.9);
+      this._updateFOV();
+      this.events_bus.emit(EV.LOG_MSG, {
+        text: 'A blue portal shimmers behind you. Step through to return.',
+        color: '#88aaff',
+      });
+    }
+  }
+
+  /** Return the player to the dungeon floor they came from via town portal. */
+  _useTownPortal() {
+    SFX.play('portalReturn');
+    const { floorNum, px, py } = this._portalReturn;
+    this._portalReturn = null;
+    this._portalPos    = null;
+    this._saveCurrentFloor();
+    this.floor = floorNum;
+    this._loadFloor(floorNum);
+    // Restore the exact position where the town scroll was used
+    this.player.x = px;
+    this.player.y = py;
+    if (this.playerSprite) {
+      this.playerSprite.setPosition(px * T + T / 2, py * T + T / 2);
+    }
+    this._updateFOV();
+    this.events_bus.emit(EV.LOG_MSG, {
+      text: 'You step through the portal and return to the dungeon.',
+      color: '#88aaff',
+    });
   }
 
   // ── Skills Panel ─────────────────────────────────────────
