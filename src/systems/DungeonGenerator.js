@@ -128,17 +128,16 @@ function connectBSP(grid, node) {
   if (r1 && r2) connectRooms(grid, r1, r2);
 }
 
-// Remove doors that don't have at least 2 open tiles among the 4 direct neighbours
+// Remove doors that don't have open tiles on exactly opposite sides (N/S or E/W).
+// Diagonal or corner positions are not valid door placements.
 function pruneInvalidDoors(grid) {
+  const isOpen = (x, y) => inBounds(x, y) && grid[y][x] !== TILE.WALL && grid[y][x] !== TILE.VOID;
   for (let y = 0; y < MAP_H; y++) {
     for (let x = 0; x < MAP_W; x++) {
       if (grid[y][x] !== TILE.DOOR) continue;
-      let open = 0;
-      for (const { dx, dy } of DIR4) {
-        const nx = x + dx, ny = y + dy;
-        if (inBounds(nx, ny) && grid[ny][nx] !== TILE.WALL && grid[ny][nx] !== TILE.VOID) open++;
-      }
-      if (open < 2) grid[y][x] = TILE.FLOOR;
+      const verticalOk   = isOpen(x, y - 1) && isOpen(x, y + 1);
+      const horizontalOk = isOpen(x - 1, y) && isOpen(x + 1, y);
+      if (!verticalOk && !horizontalOk) grid[y][x] = TILE.FLOOR;
     }
   }
 }

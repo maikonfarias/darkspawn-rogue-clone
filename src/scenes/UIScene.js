@@ -97,7 +97,7 @@ export class UIScene extends Phaser.Scene {
     }
 
     // ── Top-left stats panel ────────────────────────────────
-    const PW = 210, PH = 240;
+    const PW = 210, PH = 212;
     const PX = 6, PY = 6;
 
     this.statsBg = this.add.rectangle(PX + PW / 2, PY + PH / 2, PW, PH, 0x0d1117, 0.88)
@@ -129,16 +129,16 @@ export class UIScene extends Phaser.Scene {
     this.xpBarFill = this.add.rectangle(PX + 28, PY + 110, PW - 36, 8, 0x33aa33).setScrollFactor(0).setOrigin(0, 0);
     this.xpText    = tx(8, 120, 'LVL 1 — 0 XP', '#88cc88', 11);
 
-    // Stats
+    // Stats (2×2 layout: ATK|DEF on first row, SPD|Gold on second row)
     tx(8, 136, '──── Stats ────', '#445566', 11);
-    this.atkText  = tx(8, 150, 'ATK:  5', '#ffaa44', 12);
-    this.defText  = tx(8, 164, 'DEF:  2', '#88ccff', 12);
-    this.spdText  = tx(8, 178, 'SPD:  4', '#ffff88', 12);
-    this.goldText = tx(8, 192, 'Gold: 0', '#ffd700', 12);
+    this.atkText  = tx(8,         150, 'ATK:  5', '#ffaa44', 12);
+    this.defText  = tx(8 + 105,   150, 'DEF:  2', '#88ccff', 12);
+    this.spdText  = tx(8,         164, 'SPD:  4', '#ffff88', 12);
+    this.goldText = tx(8 + 105,   164, 'Gold: 0', '#ffd700', 12);
 
     // Controls hint
-    tx(8, 208, '[K]kills [C]raft [P]char [I]detail', '#334455', 10);
-    tx(8, 220, 'WASD  [M]ap  1–8:skills  [Space]=act', '#334455', 10);
+    tx(8, 180, '[K]kills [C]raft [P]char [I]detail', '#334455', 10);
+    tx(8, 192, 'WASD  [M]ap  1–8:skills  [Space]=act', '#334455', 10);
 
     // ── Equipment panel (below stats panel) ─────────────────
     const equipBottom = this._buildEquipPanel(W, PX, PY + PH);
@@ -934,14 +934,16 @@ export class UIScene extends Phaser.Scene {
   }
 
   _addLog({ text, color = '#ccddee' }) {
-    this.logMessages.unshift({ text, color });
-    if (this.logMessages.length > 10) this.logMessages.pop();
+    this.logMessages.push({ text, color });
+    if (this.logMessages.length > 10) this.logMessages.shift();
 
-    for (let i = 0; i < this.logLines.length; i++) {
-      const msg = this.logMessages[i];
+    const n    = this.logLines.length;
+    const msgs = this.logMessages.slice(-n);
+    for (let i = 0; i < n; i++) {
+      const msg = msgs[i];
       if (msg) {
         this.logLines[i].setText(msg.text).setColor(msg.color);
-        this.logLines[i].setAlpha(1 - i * 0.22);
+        this.logLines[i].setAlpha(1 - (n - 1 - i) * 0.22);
       } else {
         this.logLines[i].setText('');
       }
@@ -1413,12 +1415,9 @@ export class UIScene extends Phaser.Scene {
     // Controls hint (very small)
     tx(PX + 4, PY + 76, 'Tap to walk · D-pad = move · [I]nv [K]ills [C]raft [P]char', '#334455', 8);
 
-    // ── Minimap (top-right, hidden by default on mobile) ─────
+    // ── Minimap (top-right, visible by default on mobile) ─────
     this._buildMinimap(W, STATS_H + 4);
-    this.mmVisible = false;
-    this.mmBg.setVisible(false);
-    this.mmLabel.setVisible(false);
-    this.mmGraphics.setVisible(false);
+    this.mmVisible = true;
 
     // ── Message Log ───────────────────────────────────────────
     this.logBg = this.add.rectangle(W / 2, LOG_Y + LOG_H / 2, W - 4, LOG_H, 0x0d1117, 0.92)
