@@ -90,6 +90,110 @@ export class GameScene extends Phaser.Scene {
   }
 
   update() {
+    // ── Skills panel gamepad navigation ─────────────────────
+    if (this.activePanel === PANEL.SKILLS && !this.gamePaused) {
+      const gp  = this.input.gamepad;
+      const now = Date.now();
+
+      // Re-activate controller mode if gamepad input is detected while panel is open
+      if (!this._controllerMode && gp && gp.total > 0) {
+        for (const pad of gp.gamepads) {
+          if (!pad) continue;
+          const anyBtn = pad.buttons?.some(b => b?.pressed);
+          const ax = pad.leftStick?.x ?? pad.axes[0]?.value ?? 0;
+          const ay = pad.leftStick?.y ?? pad.axes[1]?.value ?? 0;
+          if (anyBtn || Math.abs(ax) > 0.4 || Math.abs(ay) > 0.4) {
+            this._controllerMode = true;
+            this._skillPadOpenTime = now; // reset cooldown so reactivation doesn't instantly act
+            if (this._skillPadSlots?.length > 0) {
+              this._skillPadSelect(Math.max(0, Math.min(this._skillPadIdx ?? 0, this._skillPadSlots.length - 1)));
+            }
+            break;
+          }
+        }
+      }
+
+      // Hide pad overlay when mouse/keyboard is active
+      if (!this._controllerMode) {
+        this._skillPadHighlight?.setVisible(false);
+        this._skillPadHint?.setVisible(false);
+        return;
+      }
+
+      // Ignore input for brief cooldown after opening
+      if (now - (this._skillPadOpenTime ?? 0) < 250) return;
+
+      if (gp && gp.total > 0) {
+        for (const pad of gp.gamepads) {
+          if (!pad) continue;
+          const pi = pad.index;
+          const prev = this._skillPadPrev?.[pi] ?? {};
+          const DEAD = 0.4;
+          const ay = pad.leftStick?.y ?? pad.axes[1]?.value ?? 0;
+          const ax = pad.leftStick?.x ?? pad.axes[0]?.value ?? 0;
+          const up    = !!pad.buttons[12]?.pressed || ay < -DEAD;
+          const down  = !!pad.buttons[13]?.pressed || ay >  DEAD;
+          const left  = !!pad.buttons[14]?.pressed || ax < -DEAD;
+          const right = !!pad.buttons[15]?.pressed || ax >  DEAD;
+          const aPressed = !!pad.buttons[0]?.pressed;
+          const bPressed = !!pad.buttons[1]?.pressed;
+
+          // Edge / held-repeat helpers
+          const edge = (cur, key) => cur && !prev[key];
+          const held = (cur, key) =>
+            cur && prev[key] &&
+            now - (this._skillPadHeld?.[key] ?? now) > 300 &&
+            now - (this._skillPadLast?.[key] ?? 0) > 140;
+          const step = (cur, key, delta) => {
+            if (edge(cur, key)) {
+              this._skillPadHeld  = this._skillPadHeld  ?? {};
+              this._skillPadLast  = this._skillPadLast  ?? {};
+              this._skillPadHeld[key] = now;
+              this._skillPadLast[key] = now;
+              this._skillPadSelect(this._skillPadIdx + delta);
+            } else if (held(cur, key)) {
+              this._skillPadLast[key] = now;
+              this._skillPadSelect(this._skillPadIdx + delta);
+            }
+            if (!cur) {
+              if (this._skillPadHeld) this._skillPadHeld[key] = null;
+            }
+          };
+
+          // Navigate flat list
+          const total = this._skillPadSlots?.length ?? 0;
+          step(up,   'up',   -1);
+          step(down, 'down',  1);
+          if (total > 0) {
+            const cur = this._skillPadSlots?.[this._skillPadIdx];
+            if (cur) {
+              const counts = this._skillPadTreeCounts ?? [];
+              if (edge(left, 'left') && cur.treeIdx > 0) {
+                const prevTreeStart = counts.slice(0, cur.treeIdx - 1).reduce((a, b) => a + b, 0);
+                this._skillPadSelect(prevTreeStart + Math.min(cur.skillIdx, counts[cur.treeIdx - 1] - 1));
+              }
+              if (edge(right, 'right') && cur.treeIdx < counts.length - 1) {
+                const nextTreeStart = counts.slice(0, cur.treeIdx + 1).reduce((a, b) => a + b, 0);
+                this._skillPadSelect(nextTreeStart + Math.min(cur.skillIdx, counts[cur.treeIdx + 1] - 1));
+              }
+            }
+          }
+
+          // A → learn selected skill
+          if (aPressed && !prev.a) {
+            const slot = this._skillPadSlots?.[this._skillPadIdx];
+            if (slot?.canUnlock) slot.tryUnlock();
+          }
+          // B → close panel
+          if (bPressed && !prev.b) this._closePanel();
+
+          this._skillPadPrev = this._skillPadPrev ?? {};
+          this._skillPadPrev[pi] = { up, down, left, right, a: aPressed, b: bPressed };
+        }
+      }
+      return;
+    }
+
     if (this.activePanel !== PANEL.NONE || this.gamePaused) return;
 
     // Block all player input while UIScene inventory pad mode is active
@@ -1873,6 +1977,27 @@ export class GameScene extends Phaser.Scene {
 
   // ── Skills Panel ─────────────────────────────────────────
 
+  _skillPadSelect(idx) {
+    const slots = this._skillPadSlots;
+    if (!slots?.length) return;
+    this._skillPadIdx = Math.max(0, Math.min(slots.length - 1, idx));
+    const slot = slots[this._skillPadIdx];
+    const hl = this._skillPadHighlight;
+    if (hl) {
+      hl.setPosition(slot.bg.x, slot.bg.y)
+        .setSize(slot.bg.width + 4, slot.bg.height + 4)
+        .setVisible(true);
+    }
+    const hint = this._skillPadHint;
+    if (hint) {
+      if (slot.canUnlock) {
+        hint.setPosition(slot.bg.x, slot.bg.y + slot.bg.height / 2 + 4).setVisible(true);
+      } else {
+        hint.setVisible(false);
+      }
+    }
+  }
+
   _renderSkillsPanel(W, H) {
     const { bx, by, PW, PH, sf, panel } = this._panelBase(W, H, '✦ SKILLS');
     this._addText(panel, bx + PW - 12*sf, by + 38*sf, `Points: ${this.player.skillPoints}`, '#ffd700', 14)
@@ -1880,6 +2005,14 @@ export class GameScene extends Phaser.Scene {
 
     const trees = Object.values(SKILL_TREES);
     const colW = (PW - 24*sf) / trees.length;
+
+    // Pad nav state
+    this._skillPadSlots = [];
+    this._skillPadTreeCounts = trees.map(t => t.skills.length);
+    this._skillPadPrev = {};
+    this._skillPadHeld = {};
+    this._skillPadLast = {};
+    this._skillPadOpenTime = Date.now(); // cooldown: ignore input for first 250ms
 
     trees.forEach((tree, ti) => {
       const cx = bx + 12*sf + ti * colW;
@@ -1897,7 +2030,9 @@ export class GameScene extends Phaser.Scene {
         const tryUnlock = () => {
           if (unlockSkill(this.player, skill.id)) {
             this.events_bus.emit(EV.LOG_MSG, { text: `Unlocked: ${skill.name}!`, color: '#ffd700' });
-            this.events_bus.emit(EV.STATS_CHANGED); // refresh skill hotbar immediately
+            this.events_bus.emit(EV.STATS_CHANGED);
+            // Refresh panel in-place without toggling it closed
+            this._closePanel();
             this._openPanel(PANEL.SKILLS);
           }
         };
@@ -1908,6 +2043,8 @@ export class GameScene extends Phaser.Scene {
           .setInteractive();
         if (canUnlockSkill) bg.on('pointerdown', tryUnlock);
         panel.add(bg);
+
+        this._skillPadSlots.push({ bg, canUnlock: canUnlockSkill, tryUnlock, treeIdx: ti, skillIdx: si });
 
         // Skill icon
         const iconSz = Math.round(22 * sf);
@@ -1937,6 +2074,24 @@ export class GameScene extends Phaser.Scene {
         }
       });
     });
+
+    // Gamepad selection highlight (yellow outline, rendered above cards)
+    this._skillPadHighlight = this.add.rectangle(0, 0, 10, 10, 0x000000, 0)
+      .setStrokeStyle(2, 0xffdd00).setDepth(32).setVisible(false);
+    panel.add(this._skillPadHighlight);
+
+    // Ⓐ LEARN hint below selected card
+    this._skillPadHint = this.add.text(0, 0, '\u24b6  LEARN', {
+      fontFamily: 'Courier New', fontSize: '11px', color: '#00ff88',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5, 0).setDepth(32).setVisible(false);
+    panel.add(this._skillPadHint);
+
+    // Init selection if controller is active
+    if (this._controllerMode && this._skillPadSlots.length > 0) {
+      this._skillPadIdx = Math.max(0, Math.min(this._skillPadIdx ?? 0, this._skillPadSlots.length - 1));
+      this._skillPadSelect(this._skillPadIdx);
+    }
   }
 
   // ── Crafting Panel ────────────────────────────────────────

@@ -482,27 +482,7 @@ export class UIScene extends Phaser.Scene {
     this._hotbarSkills = [];
     this._hotbarSlotObjects = [];
     this._selectedSkillId = null;  // two-click selection state
-
-    // ── Skills menu button (right of hotbar) ────────────────
-    const SBTN_X = W / 2 + (panelW - 16) / 2 + GAP + SZ / 2 + 4;
-    const skillsBg = this.add.rectangle(SBTN_X, HB_Y + SZ / 2, SZ, SZ, 0x161628, 1)
-      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(4)
-      .setInteractive({ useHandCursor: true });
-    this.add.text(SBTN_X, HB_Y + SZ / 2 - 6, 'SKILLS', {
-      fontFamily: 'Courier New', fontSize: '8px', color: '#556688',
-    }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(5);
-    this.add.text(SBTN_X, HB_Y + SZ / 2 + 7, '[K]', {
-      fontFamily: 'Courier New', fontSize: '9px', color: '#334455',
-    }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(5);
-    this._skillsBadge = this.add.text(SBTN_X + SZ / 2 - 3, HB_Y, '', {
-      fontFamily: 'Courier New', fontSize: '11px', color: '#ffd700',
-    }).setOrigin(1, 0).setScrollFactor(0).setDepth(4);
-    skillsBg.on('pointerover', () => skillsBg.setFillStyle(0x22223a));
-    skillsBg.on('pointerout',  () => skillsBg.setFillStyle(0x161628));
-    skillsBg.on('pointerdown', () => {
-      const gs = this.scene.get(SCENE.GAME);
-      if (gs && !gs.gamePaused) gs._openPanel(2); // PANEL.SKILLS = 2
-    });
+    this._skillsBadge = null;
 
     this._refreshSkillHotbar();
   }
@@ -1448,11 +1428,11 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0).setDepth(50).setInteractive());
 
     // Panel box
-    const PW = 380, PH = 400;
+    const PW = 380, PH = 460;
     add(this.add.rectangle(W / 2, H / 2, PW, PH, 0x0a0a14, 0.97)
       .setScrollFactor(0).setDepth(51).setStrokeStyle(2, 0x334466));
 
-    add(this.add.text(W / 2, H / 2 - 138, '❚❚  PAUSED', {
+    add(this.add.text(W / 2, H / 2 - 165, '❚❚  PAUSED', {
       fontFamily: 'Courier New', fontSize: '26px', color: '#ffd700',
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(52));
@@ -1470,6 +1450,10 @@ export class UIScene extends Phaser.Scene {
 
     Music.suspend();
 
+    const gs = this.scene.get(SCENE.GAME);
+    const skillPts = gs?.player?.skillPoints ?? 0;
+    const skillLabel = skillPts > 0 ? `[ SKILLS ] (${skillPts})` : '[ SKILLS ]';
+
     const continueAction = () => this.bus.emit(EV.RESUME_GAME);
     const saveAction = () => {
       const gs = this.scene.get(SCENE.GAME);
@@ -1480,6 +1464,11 @@ export class UIScene extends Phaser.Scene {
       });
       this.bus.emit(EV.RESUME_GAME);
     };
+    const skillsAction = () => {
+      this.bus.emit(EV.RESUME_GAME);
+      const gs2 = this.scene.get(SCENE.GAME);
+      if (gs2) gs2._openPanel(2); // PANEL.SKILLS = 2
+    };
     const helpAction  = () => this._showInstructions();
     const menuAction  = () => {
       this.bus.emit(EV.RESUME_GAME);
@@ -1489,10 +1478,11 @@ export class UIScene extends Phaser.Scene {
     };
 
     this._pauseBtns = [
-      { obj: mkBtn('[ CONTINUE ]',    H / 2 - 50,  '#44ff88', continueAction), action: continueAction },
-      { obj: mkBtn('[ SAVE GAME ]',   H / 2 + 10,  '#ffd700', saveAction),     action: saveAction     },
-      { obj: mkBtn('[ HOW TO PLAY ]', H / 2 + 70,  '#88aaff', helpAction),     action: helpAction     },
-      { obj: mkBtn('[ MAIN MENU ]',   H / 2 + 130, '#ff8888', menuAction),     action: menuAction     },
+      { obj: mkBtn('[ CONTINUE ]', H / 2 - 80,  '#44ff88', continueAction), action: continueAction },
+      { obj: mkBtn('[ SAVE GAME ]', H / 2 - 20,  '#ffd700', saveAction),    action: saveAction     },
+      { obj: mkBtn(skillLabel,      H / 2 + 40,  '#88aaff', skillsAction),  action: skillsAction   },
+      { obj: mkBtn('[ HOW TO PLAY ]', H / 2 + 100, '#88aaff', helpAction),  action: helpAction     },
+      { obj: mkBtn('[ MAIN MENU ]',   H / 2 + 160, '#ff8888', menuAction),  action: menuAction     },
     ];
 
     // Gamepad cursor
@@ -1506,12 +1496,12 @@ export class UIScene extends Phaser.Scene {
     this._updatePauseSel(0);
 
     // ── Audio toggles ────────────────────────────────────────
-    add(this.add.text(W / 2, H / 2 + 188, '── Audio ──', {
+    add(this.add.text(W / 2, H / 2 + 208, '── Audio ──', {
       fontFamily: 'Courier New', fontSize: '13px', color: '#445566',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(52));
 
     const mkToggle = (label, x, stateFn, action) => {
-      const btn = add(this.add.text(x, H / 2 + 215, label + (stateFn() ? 'ON' : 'OFF'), {
+      const btn = add(this.add.text(x, H / 2 + 228, label + (stateFn() ? 'ON' : 'OFF'), {
         fontFamily: 'Courier New', fontSize: '14px', color: '#88aacc',
         backgroundColor: '#111122', padding: { x: 12, y: 7 },
       }).setOrigin(0.5).setScrollFactor(0).setDepth(52).setInteractive({ useHandCursor: true }));
@@ -1916,21 +1906,19 @@ export class UIScene extends Phaser.Scene {
     const BTN_GAP      = 3;
     const BTN_H        = ACTION_H - 8;
     const actionStartX = rightColX;
-    const BTN_W        = Math.floor((W - actionStartX - 4 - 3 * BTN_GAP) / 4);
-    const totalBtnsW   = 4 * BTN_W + 3 * BTN_GAP;  // exact width the 4 buttons span
+    const BTN_W        = Math.floor((W - actionStartX - 4 - 1 * BTN_GAP) / 2);
+    const totalBtnsW   = 2 * BTN_W + 1 * BTN_GAP;  // exact width the 2 buttons span
     const btnsCenterX  = actionStartX + totalBtnsW / 2;  // shared center for hotbar alignment
 
-    // ── Skill hotbar: same width & center as the 4 buttons ───────────────────
+    // ── Skill hotbar: same width & center as the 2 buttons ───────────────────
     const hotbarStartY = startY + height - ACTION_H - HOTBAR_H;
     this._buildSkillHotbar_portrait(W, hotbarStartY, HOTBAR_H, rightColX, totalBtnsW, btnsCenterX);
     const actionStartY = startY + height - ACTION_H + Math.floor((ACTION_H - BTN_H) / 2);
 
-    // 4 action buttons only (MAP and PAUSE moved to top-right corner)
+    // 2 action buttons (SKILL and CHAR moved to pause menu)
     const ACTIONS = [
       { lbl: 'INV\n[I]',   col: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(1); } },
-      { lbl: 'SKILL\n[K]', col: 1, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(2); } },
-      { lbl: 'CRAFT\n[C]', col: 2, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(3); } },
-      { lbl: 'CHAR\n[P]',  col: 3, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(4); } },
+      { lbl: 'CRAFT\n[C]', col: 1, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(3); } },
     ];
 
     for (const act of ACTIONS) {
