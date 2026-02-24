@@ -1265,10 +1265,10 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (mode === 'magicBolt') {
+      SFX.play('skill-magicBolt');
+      this._playSkillAnimation('magicBolt', tx, ty);
       const m = this.monsters.find(mon => mon.x === tx && mon.y === ty && !mon.isDead);
       if (m) {
-        SFX.play('skill-magicBolt');
-        this._playSkillAnimation('magicBolt', tx, ty);
         const dmg = magicBoltDamage(this.player, m, extra.baseDmg, this.player.level);
         this._showDamageNumber(m.x, m.y, dmg, '#88aaff');
         this.events_bus.emit(EV.LOG_MSG, { text: `Magic Bolt hits ${m.name} for ${dmg}!`, color: '#8888ff' });
