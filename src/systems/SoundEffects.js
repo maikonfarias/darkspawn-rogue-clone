@@ -43,8 +43,8 @@ class SoundEffectsEngine {
       case 'door':        this._door(ctx);       break;
       case 'stairs-down': this._stairs(ctx, false); break;
       case 'stairs-up':   this._stairs(ctx, true);  break;
+      case 'elder-heal':  this._elderHeal(ctx);     break;
       case 'use':         this._use(ctx);        break;
-      case 'elder-heal':  this._elderHeal(ctx);  break;
       // Skills
       case 'skill-magicBolt':   this._sndMagicBolt(ctx);   break;
       case 'skill-fireball':    this._sndFireball(ctx);    break;
