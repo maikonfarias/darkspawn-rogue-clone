@@ -1210,6 +1210,13 @@ export class GameScene extends Phaser.Scene {
     const dy = next.y - this.player.y;
     this._playerMove(dx, dy);
 
+    // If the player didn't reach the expected tile (e.g., bump-attacked a monster
+    // that wasn't visible yet, or was blocked by a chest), cancel the walk.
+    if (this.player.x !== next.x || this.player.y !== next.y) {
+      this._cancelClickWalk();
+      return;
+    }
+
     // If more steps remain, schedule the next one
     if (this._clickPath.length) {
       this._clickWalkTimer = this.time.delayedCall(120, () => this._stepClickWalk());
