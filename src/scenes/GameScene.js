@@ -756,6 +756,17 @@ export class GameScene extends Phaser.Scene {
           text: '🧙 Elder: "Stay a while and listen..."',
           color: '#ddaaff',
         });
+        const p = this.player;
+        if (p.stats.hp < p.stats.maxHp || p.stats.mana < p.stats.maxMana) {
+          p.stats.hp   = p.stats.maxHp;
+          p.stats.mana = p.stats.maxMana;
+          SFX.play('elder-heal');
+          this.events_bus.emit(EV.LOG_MSG, {
+            text: '✨ You feel restored. HP and MP fully recovered.',
+            color: '#aaffcc',
+          });
+          this.events_bus.emit(EV.STATS_CHANGED);
+        }
         return;
       }
     }
