@@ -93,6 +93,8 @@ export class GameScene extends Phaser.Scene {
     if (this.activePanel !== PANEL.NONE || this.targeting || this.gamePaused) return;
 
     const now = Date.now();
+
+    // ── Keyboard hold-to-walk ─────────────────────────────
     for (const [code, pressTime] of Object.entries(this.heldKeys)) {
       const dir = this.moveKeys[code];
       if (!dir) continue;
@@ -101,6 +103,75 @@ export class GameScene extends Phaser.Scene {
         this._playerMove(dir.dx, dir.dy);
         this.lastMoveTime = now;
         break;
+      }
+    }
+
+    // ── Gamepad (all connected pads, any player) ──────────
+    const gp = this.input.gamepad;
+    if (gp && gp.total > 0) {
+      const DEAD = 0.4;
+      let gdx = 0, gdy = 0;
+      let anyInput = false;
+
+      for (const pad of gp.gamepads) {
+        if (!pad) continue;
+        const pi = pad.index;
+        const prev = this._padPrevButtons[pi] ?? {};
+
+        // D-Pad (standard mapping: 12=up 13=down 14=left 15=right)
+        if (pad.buttons[12]?.pressed) { gdy -= 1; anyInput = true; }
+        if (pad.buttons[13]?.pressed) { gdy += 1; anyInput = true; }
+        if (pad.buttons[14]?.pressed) { gdx -= 1; anyInput = true; }
+        if (pad.buttons[15]?.pressed) { gdx += 1; anyInput = true; }
+        // Left analog stick (Phaser wraps axes as objects with a .value property)
+        const ax = pad.leftStick?.x ?? pad.axes[0]?.value ?? 0;
+        const ay = pad.leftStick?.y ?? pad.axes[1]?.value ?? 0;
+        if (Math.abs(ax) > DEAD) { gdx = Math.sign(ax); anyInput = true; }
+        if (Math.abs(ay) > DEAD) { gdy = Math.sign(ay); anyInput = true; }
+        // Any other button pressed counts as input for mode activation
+        for (let bi = 0; bi < (pad.buttons?.length ?? 0); bi++) {
+          if (pad.buttons[bi]?.pressed) { anyInput = true; break; }
+        }
+
+        // A button (index 0) — just-pressed edge: maps to Space / default action
+        const aPressed = !!pad.buttons[0]?.pressed;
+        if (aPressed && !prev[0] && this._controllerMode) {
+          this._cancelClickWalk();
+          this._playerDefaultAction();
+        }
+
+        // Store this frame's state for next frame edge detection
+        this._padPrevButtons[pi] = { 0: aPressed };
+      }
+
+      // First time we see any input: activate controller mode and eat the frame
+      if (anyInput && !this._controllerMode) {
+        this._controllerMode = true;
+        this._padHeldSince = null;
+        return;
+      }
+
+      if (!this._controllerMode) return;
+
+      gdx = Math.sign(gdx);
+      gdy = Math.sign(gdy);
+
+      if (gdx !== 0 || gdy !== 0) {
+        this._cancelClickWalk();
+        if (this._padHeldSince === null) {
+          // First frame — move immediately
+          this._padHeldSince = now;
+          this._playerMove(gdx, gdy);
+          this.lastMoveTime = now;
+        } else {
+          const held = now - this._padHeldSince;
+          if (held >= this.keyRepeat && now - this.lastMoveTime >= this.keyInterval) {
+            this._playerMove(gdx, gdy);
+            this.lastMoveTime = now;
+          }
+        }
+      } else {
+        this._padHeldSince = null;
       }
     }
   }
@@ -515,6 +586,13 @@ export class GameScene extends Phaser.Scene {
       this._onKeyDown(event);
     });
     kb.on('keyup',   (event) => { delete this.heldKeys[event.code]; });
+
+    // Gamepad: track hold state (first frame fires immediately, then repeat)
+    this._padHeldSince = null;
+    // Per-pad previous-frame button states for edge detection (just-pressed)
+    this._padPrevButtons = {}; // padIndex → { buttonIndex → wasPressed }
+    // Controller mode: false until any pad input is detected for the first time
+    this._controllerMode = false;
 
     this.input.on('pointerdown', (ptr) => this._onPointerDown(ptr));
     this.input.on('pointerdown', (ptr) => { if (ptr.rightButtonDown()) this._cancelClickWalk(); });

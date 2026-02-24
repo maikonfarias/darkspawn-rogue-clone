@@ -5,6 +5,7 @@ import { SCENE, C } from '../data/Constants.js';
 import { hasSave, saveTimestamp } from '../systems/SaveSystem.js';
 import { Music } from '../systems/ProceduralMusic.js';
 import { SFX } from '../systems/SoundEffects.js';
+import { Settings } from '../systems/Settings.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super({ key: SCENE.MENU }); }
@@ -68,13 +69,20 @@ export class MenuScene extends Phaser.Scene {
     const btnOffset   = hasSaveFile ? (portrait ? 30 : 35) : 0;
     const btnFontSize = portrait ? '16px' : '20px';
 
+    // Gamepad menu state
+    this._menuBtns         = [];  // [{ obj, action }]
+    this._selIdx           = 0;
+    this._helpClose        = null;
+    this._controllerMode   = false; // activated on first gamepad input
+    this._padPrevNav       = { up: false, down: false, a: false, b: false };
+    this._padNavHeldSince  = null;
+    this._padNavLastRepeat = 0;
+
     if (hasSaveFile) {
       const ts = saveTimestamp();
-      this._makeButton(W / 2, btnBaseY - 30, '  [ CONTINUE ]  ', '#88ffcc', '#001a10', btnFontSize, () => {
-        Music.stop(1.5);
-        this.scene.start(SCENE.GAME, { loadSave: true });
-        this.scene.launch(SCENE.UI);
-      });
+      const contAction = () => { Music.stop(1.5); this.scene.start(SCENE.GAME, { loadSave: true }); this.scene.launch(SCENE.UI); };
+      const contBtn = this._makeButton(W / 2, btnBaseY - 30, '  [ CONTINUE ]  ', '#88ffcc', '#001a10', btnFontSize, contAction);
+      this._menuBtns.push({ obj: contBtn, action: contAction });
       if (ts) {
         this.add.text(W / 2, btnBaseY + 6, ts, {
           fontFamily: 'Courier New', fontSize: '11px', color: '#445544',
@@ -82,15 +90,24 @@ export class MenuScene extends Phaser.Scene {
       }
     }
 
-    this._makeButton(W / 2, btnBaseY + 30 + btnOffset, '  [ NEW GAME ]  ', '#ffd700', '#221100', btnFontSize, () => {
-      Music.stop(1.5);
-      this.scene.start(SCENE.GAME, { loadSave: false });
-      this.scene.launch(SCENE.UI);
-    });
+    const newAction = () => { Music.stop(1.5); this.scene.start(SCENE.GAME, { loadSave: false }); this.scene.launch(SCENE.UI); };
+    const newBtn = this._makeButton(W / 2, btnBaseY + 30 + btnOffset, '  [ NEW GAME ]  ', '#ffd700', '#221100', btnFontSize, newAction);
+    this._menuBtns.push({ obj: newBtn, action: newAction });
 
-    this._makeButton(W / 2, btnBaseY + 90 + btnOffset, '  [ HOW TO PLAY ]  ', '#88aacc', '#001122', btnFontSize, () => {
-      this._showHelp();
-    });
+    const helpAction = () => this._showHelp();
+    const helpBtn = this._makeButton(W / 2, btnBaseY + 90 + btnOffset, '  [ HOW TO PLAY ]  ', '#88aacc', '#001122', btnFontSize, helpAction);
+    this._menuBtns.push({ obj: helpBtn, action: helpAction });
+
+    // Gamepad cursor ► — hidden until a controller is used
+    this._menuCursor = this.add.text(0, 0, '►', {
+      fontFamily: 'Courier New, monospace', fontSize: btnFontSize, color: '#ffffff',
+    }).setOrigin(1, 0.5).setAlpha(0.9).setVisible(false);
+
+    // Mouse/touch deactivates controller mode
+    this.input.on('pointermove', () => this._deactivateControllerMode());
+    this.input.on('pointerdown', () => this._deactivateControllerMode());
+
+    this._updateMenuSel(0);
 
     // Controls reference (desktop only — shown as inline hint on portrait)
     if (!portrait) {
@@ -131,10 +148,19 @@ export class MenuScene extends Phaser.Scene {
       btn.on('pointerdown', () => { onClick(); btn.setText(labelFn()); });
       return btn;
     };
-    mkAudioBtn(W - 6,       H - 6, () => `♪ MUSIC: ${Music.isPlaying ? 'ON' : 'OFF'}`,
-      () => { if (Music.isPlaying) Music.stop(0.5); else Music.play('menu'); });
+    mkAudioBtn(W - 6,       H - 6, () => `♪ MUSIC: ${Music.musicEnabled ? 'ON' : 'OFF'}`,
+      () => {
+        if (Music.musicEnabled) {
+          Music.musicEnabled = false;
+        } else {
+          Music.musicEnabled = true;
+          if (!Music.isPlaying) Music.play(Music.themeKey ?? 'menu');
+        }
+        Settings.musicEnabled = Music.musicEnabled;
+        Settings.save();
+      });
     mkAudioBtn(W - 6 - 130, H - 6, () => `🔊 SFX: ${SFX.muted ? 'OFF' : 'ON'}`,
-      () => { SFX.muted = !SFX.muted; });
+      () => { SFX.muted = !SFX.muted; Settings.sfxEnabled = !SFX.muted; Settings.save(); });
 
     // Start ambient menu music on first pointer interaction
     // (required by browser autoplay policy)
@@ -150,6 +176,111 @@ export class MenuScene extends Phaser.Scene {
     for (const p of this.particles) {
       p.y += p.vy;
       if (p.y > H + 4) p.y = -4;
+    }
+
+    // ── Gamepad menu navigation ───────────────────────────
+    const gp = this.input.gamepad;
+    if (gp && gp.total > 0 && this._menuBtns) {
+      const DEAD = 0.4;
+      let navUp = false, navDown = false, navA = false, navB = false;
+
+      for (const pad of gp.gamepads) {
+        if (!pad) continue;
+        const sx = pad.leftStick?.x ?? pad.axes[0]?.value ?? 0;
+        const sy = pad.leftStick?.y ?? pad.axes[1]?.value ?? 0;
+        if (pad.buttons[12]?.pressed || sy < -DEAD) navUp   = true;
+        if (pad.buttons[13]?.pressed || sy >  DEAD) navDown = true;
+        if (pad.buttons[0]?.pressed) navA = true;
+        if (pad.buttons[1]?.pressed) navB = true;
+      }
+
+      const prev = this._padPrevNav;
+      const now  = Date.now();
+      // anyInput = any stick movement OR any button on any pad
+      const anyInput = navUp || navDown || navA || navB ||
+        [...(gp.gamepads ?? [])].some(pad => {
+          if (!pad) return false;
+          const sx = pad.leftStick?.x ?? pad.axes[0]?.value ?? 0;
+          const sy = pad.leftStick?.y ?? pad.axes[1]?.value ?? 0;
+          if (Math.abs(sx) > DEAD || Math.abs(sy) > DEAD) return true;
+          return pad.buttons?.some(b => b?.pressed) ?? false;
+        });
+
+      // Activate controller mode on first gamepad input — eat that frame
+      if (anyInput && !this._controllerMode) {
+        this._activateControllerMode();
+        this._padPrevNav = { up: navUp, down: navDown, a: navA, b: navB };
+        return;
+      }
+      if (!this._controllerMode) {
+        this._padPrevNav = { up: navUp, down: navDown, a: navA, b: navB };
+        return;
+      }
+
+      // ── Help dialog: A or B closes it ──
+      if (this._helpClose) {
+        if ((navA && !prev.a) || (navB && !prev.b)) {
+          this._helpClose();
+        }
+      } else {
+        // ── Menu navigation ──
+        const justUp   = navUp   && !prev.up;
+        const justDown = navDown && !prev.down;
+
+        if (!navUp && !navDown) {
+          this._padNavHeldSince = null;
+        }
+
+        let doNav = false;
+        if (justUp || justDown) {
+          this._padNavHeldSince = now;
+          doNav = true;
+        } else if ((navUp || navDown) && this._padNavHeldSince !== null) {
+          const held = now - this._padNavHeldSince;
+          if (held >= 380 && now - this._padNavLastRepeat >= 160) doNav = true;
+        }
+
+        if (doNav) {
+          this._padNavLastRepeat = now;
+          const dir  = navUp ? -1 : 1;
+          const next = (this._selIdx + dir + this._menuBtns.length) % this._menuBtns.length;
+          this._updateMenuSel(next);
+        }
+
+        // A = confirm selected button
+        if (navA && !prev.a && this._menuBtns[this._selIdx]) {
+          this._menuBtns[this._selIdx].action();
+        }
+      }
+
+      this._padPrevNav = { up: navUp, down: navDown, a: navA, b: navB };
+    }
+  }
+
+  _activateControllerMode() {
+    if (this._controllerMode) return;
+    this._controllerMode = true;
+    this._updateMenuSel(this._selIdx); // applies dim + shows cursor
+  }
+
+  _deactivateControllerMode() {
+    if (!this._controllerMode) return;
+    this._controllerMode = false;
+    // Restore all buttons to full alpha, hide cursor
+    if (this._menuBtns) this._menuBtns.forEach(b => b.obj.setAlpha(1.0));
+    if (this._menuCursor) this._menuCursor.setVisible(false);
+  }
+
+  _updateMenuSel(idx) {
+    this._selIdx = idx;
+    if (this._controllerMode) {
+      this._menuBtns.forEach((item, i) => item.obj.setAlpha(i === idx ? 1.0 : 0.45));
+      const sel = this._menuBtns[idx];
+      if (sel && this._menuCursor) {
+        this._menuCursor
+          .setPosition(sel.obj.x - sel.obj.displayWidth / 2 - 8, sel.obj.y)
+          .setVisible(true);
+      }
     }
   }
 
@@ -329,9 +460,13 @@ export class MenuScene extends Phaser.Scene {
     }
 
     // ── Close hint ──────────────────────────────────────────
-    tx(PW / 2, PH - 22, '[ Press any key or click to close ]', '#334455', 11).setOrigin(0.5, 0);
+    tx(PW / 2, PH - 22, '[ A / B  ·  any key  ·  click  =  close ]', '#334455', 11).setOrigin(0.5, 0);
 
-    const close = () => { for (const o of created) o.destroy(); };
+    const close = () => {
+      for (const o of created) o.destroy();
+      this._helpClose = null;
+    };
+    this._helpClose = close;
 
     // Defer by one frame so the click that opened the panel
     // doesn't immediately trigger the close listener.

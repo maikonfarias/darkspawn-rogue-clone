@@ -10,6 +10,7 @@ import { getAvailableRecipes } from '../systems/CraftingSystem.js';
 import { saveGame } from '../systems/SaveSystem.js';
 import { Music } from '../systems/ProceduralMusic.js';
 import { SFX } from '../systems/SoundEffects.js';
+import { Settings } from '../systems/Settings.js';
 
 const ACTIVE_SKILL_ORDER = ['berserkerRage','whirlwind','shadowStep','deathMark','magicBolt','fireball','iceNova','arcaneShield'];
 const TARGETABLE_SKILLS  = new Set(['magicBolt','fireball','shadowStep','deathMark']);
@@ -52,6 +53,16 @@ export class UIScene extends Phaser.Scene {
     this.bus.on('skill-selection-done', () => this._clearSkillSelection());
     this.bus.on('world-click',          () => this._clearSelection());
 
+    // Gamepad
+    this._padPrevStart        = {}; // padIndex → wasPressed (for Start edge detect)
+    this._pausePadPrev        = { up: false, down: false, a: false, b: false };
+    this._pauseNavHeldSince   = null;
+    this._pauseNavLastRepeat  = 0;
+    this._pauseBtns           = null; // set when pause menu is open
+    this._pauseCursor         = null;
+    this._pauseSelIdx         = 0;
+    this._instrClose          = null; // set when instructions overlay is open
+
     // Portrait panel overlay (panels rendered in UIScene for correct 1:1 screen coords)
     this.bus.on('panel-open',  (type) => this._showPanel(type));
     this.bus.on('panel-close', ()     => this._hidePanel());
@@ -80,6 +91,93 @@ export class UIScene extends Phaser.Scene {
     const gs = this.scene.get(SCENE.GAME);
     if (gs?.floor !== undefined) this._refreshFloor(gs.floor);
     if (gs?.grid)  this._updateMinimap();
+  }
+
+  // ── Lifecycle ────────────────────────────────────────────
+
+  update() {
+    const gp = this.input.gamepad;
+    if (!gp || gp.total === 0) return;
+    const DEAD = 0.4;
+    let startPressed = false, navUp = false, navDown = false, navA = false, navB = false;
+
+    for (const pad of gp.gamepads) {
+      if (!pad) continue;
+      const pi      = pad.index;
+      const prevS   = this._padPrevStart?.[pi] ?? false;
+      const startNow = !!pad.buttons[9]?.pressed;
+
+      // Start button — edge: toggle pause
+      if (startNow && !prevS) startPressed = true;
+      if (this._padPrevStart) this._padPrevStart[pi] = startNow;
+
+      // Navigation inputs
+      const sy = pad.leftStick?.y ?? pad.axes[1]?.value ?? 0;
+      if (pad.buttons[12]?.pressed || sy < -DEAD) navUp   = true;
+      if (pad.buttons[13]?.pressed || sy >  DEAD) navDown = true;
+      if (pad.buttons[0]?.pressed) navA = true;
+      if (pad.buttons[1]?.pressed) navB = true;
+    }
+
+    // Start button toggles pause
+    if (startPressed) {
+      const gs = this.scene.get(SCENE.GAME);
+      if (gs) {
+        if (gs.gamePaused) this.bus.emit(EV.RESUME_GAME);
+        else               this.bus.emit(EV.PAUSE_GAME);
+      }
+    }
+
+    const prev = this._pausePadPrev;
+
+    // ── Instructions overlay: A or B closes ──
+    if (this._instrClose) {
+      if ((navA && !prev.a) || (navB && !prev.b)) this._instrClose();
+      this._pausePadPrev = { up: navUp, down: navDown, a: navA, b: navB };
+      return;
+    }
+
+    // ── Pause menu navigation ──
+    if (!this._pauseBtns) {
+      this._pausePadPrev = { up: navUp, down: navDown, a: navA, b: navB };
+      return;
+    }
+
+    const now = Date.now();
+    const justUp   = navUp   && !prev.up;
+    const justDown = navDown && !prev.down;
+    if (!navUp && !navDown) this._pauseNavHeldSince = null;
+
+    let doNav = false;
+    if (justUp || justDown) { this._pauseNavHeldSince = now; doNav = true; }
+    else if ((navUp || navDown) && this._pauseNavHeldSince !== null) {
+      if (now - this._pauseNavHeldSince >= 380 && now - this._pauseNavLastRepeat >= 160) doNav = true;
+    }
+    if (doNav) {
+      this._pauseNavLastRepeat = now;
+      const dir  = navUp ? -1 : 1;
+      const next = (this._pauseSelIdx + dir + this._pauseBtns.length) % this._pauseBtns.length;
+      this._updatePauseSel(next);
+    }
+
+    // A = confirm, B = close pause (same as Continue)
+    if (navA && !prev.a && this._pauseBtns[this._pauseSelIdx]) {
+      this._pauseBtns[this._pauseSelIdx].action();
+    }
+    if (navB && !prev.b) this.bus.emit(EV.RESUME_GAME);
+
+    this._pausePadPrev = { up: navUp, down: navDown, a: navA, b: navB };
+  }
+
+  _updatePauseSel(idx) {
+    this._pauseSelIdx = idx;
+    this._pauseBtns.forEach((item, i) => item.obj.setAlpha(i === idx ? 1.0 : 0.45));
+    const sel = this._pauseBtns[idx];
+    if (sel && this._pauseCursor) {
+      this._pauseCursor
+        .setPosition(sel.obj.x - sel.obj.displayWidth / 2 - 10, sel.obj.y)
+        .setVisible(true);
+    }
   }
 
   _buildHUD() {
@@ -1161,8 +1259,8 @@ export class UIScene extends Phaser.Scene {
 
     Music.suspend();
 
-    mkBtn('[ CONTINUE ]',    H / 2 - 50, '#44ff88', () => this.bus.emit(EV.RESUME_GAME));
-    mkBtn('[ SAVE GAME ]',   H / 2 + 10, '#ffd700', () => {
+    const continueAction = () => this.bus.emit(EV.RESUME_GAME);
+    const saveAction = () => {
       const gs = this.scene.get(SCENE.GAME);
       const ok = saveGame(gs);
       this.bus.emit(EV.LOG_MSG, {
@@ -1170,14 +1268,31 @@ export class UIScene extends Phaser.Scene {
         color: ok ? '#88ffcc' : '#ff8888',
       });
       this.bus.emit(EV.RESUME_GAME);
-    });
-    mkBtn('[ HOW TO PLAY ]', H / 2 + 70, '#88aaff', () => this._showInstructions());
-    mkBtn('[ MAIN MENU ]',   H / 2 + 130, '#ff8888', () => {
+    };
+    const helpAction  = () => this._showInstructions();
+    const menuAction  = () => {
       this.bus.emit(EV.RESUME_GAME);
       this.scene.stop(SCENE.UI);
       this.scene.stop(SCENE.GAME);
       this.scene.start(SCENE.MENU);
-    });
+    };
+
+    this._pauseBtns = [
+      { obj: mkBtn('[ CONTINUE ]',    H / 2 - 50,  '#44ff88', continueAction), action: continueAction },
+      { obj: mkBtn('[ SAVE GAME ]',   H / 2 + 10,  '#ffd700', saveAction),     action: saveAction     },
+      { obj: mkBtn('[ HOW TO PLAY ]', H / 2 + 70,  '#88aaff', helpAction),     action: helpAction     },
+      { obj: mkBtn('[ MAIN MENU ]',   H / 2 + 130, '#ff8888', menuAction),     action: menuAction     },
+    ];
+
+    // Gamepad cursor
+    this._pauseCursor = add(this.add.text(0, 0, '►', {
+      fontFamily: 'Courier New', fontSize: '18px', color: '#ffffff',
+    }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(53).setVisible(false));
+
+    this._pauseSelIdx       = 0;
+    this._pausePadPrev      = { up: false, down: false, a: false, b: false };
+    this._pauseNavHeldSince = null;
+    this._updatePauseSel(0);
 
     // ── Audio toggles ────────────────────────────────────────
     add(this.add.text(W / 2, H / 2 + 188, '── Audio ──', {
@@ -1194,10 +1309,19 @@ export class UIScene extends Phaser.Scene {
       btn.on('pointerdown', () => { action(); btn.setText(label + (stateFn() ? 'ON' : 'OFF')); });
       return btn;
     };
-    mkToggle('♪ MUSIC: ', W / 2 - 72, () => Music.isPlaying,
-      () => { if (Music.isPlaying) Music.stop(0.5); else Music.play('shallow'); });
+    mkToggle('♪ MUSIC: ', W / 2 - 72, () => Music.musicEnabled,
+      () => {
+        if (Music.musicEnabled) {
+          Music.musicEnabled = false;
+        } else {
+          Music.musicEnabled = true;
+          if (!Music.isPlaying) Music.play(Music.themeKey ?? 'shallow');
+        }
+        Settings.musicEnabled = Music.musicEnabled;
+        Settings.save();
+      });
     mkToggle('🔊 SFX: ',  W / 2 + 72, () => !SFX.muted,
-      () => { SFX.muted = !SFX.muted; });
+      () => { SFX.muted = !SFX.muted; Settings.sfxEnabled = !SFX.muted; Settings.save(); });
 
     // Escape key resumes
     this._pauseEscHandler = () => this.bus.emit(EV.RESUME_GAME);
@@ -1209,7 +1333,10 @@ export class UIScene extends Phaser.Scene {
   _closePauseMenu() {
     if (!this._pauseItems) return;
     for (const o of this._pauseItems) o.destroy();
-    this._pauseItems = null;
+    this._pauseItems  = null;
+    this._pauseBtns   = null;
+    this._pauseCursor = null;
+    this._instrClose  = null;
     if (this._pauseEscHandler) {
       this.input.keyboard.off('keydown-ESC', this._pauseEscHandler);
       this._pauseEscHandler = null;
@@ -1338,7 +1465,11 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(62).setInteractive({ useHandCursor: true }));
     closeBtn.on('pointerover', () => closeBtn.setColor('#ffd700'));
     closeBtn.on('pointerout',  () => closeBtn.setColor('#88aacc'));
-    const close = () => { for (const o of items) o.destroy(); };
+    const close = () => {
+      for (const o of items) o.destroy();
+      this._instrClose = null;
+    };
+    this._instrClose = close;
     closeBtn.on('pointerdown', close);
     this.time.delayedCall(0, () => {
       this.input.keyboard.once('keydown-ESC', close);

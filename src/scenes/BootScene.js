@@ -4,11 +4,18 @@
 // ============================================================
 import { SCENE } from '../data/Constants.js';
 import { generateAllTextures } from '../utils/TextureGenerator.js';
+import { Settings } from '../systems/Settings.js';
+import { Music } from '../systems/ProceduralMusic.js';
+import { SFX } from '../systems/SoundEffects.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() { super({ key: SCENE.BOOT }); }
 
   create() {
+    // Load and apply persisted audio settings before anything else
+    Settings.load();
+    Settings.apply(Music, SFX);
+
     // White background while generating
     this.cameras.main.setBackgroundColor('#0a0a0f');
 
