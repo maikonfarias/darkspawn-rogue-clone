@@ -1364,16 +1364,16 @@ export class GameScene extends Phaser.Scene {
     this.activePanel = panel;
 
     const cam = this.cameras.main;
+    cam.stopFollow(); // keep the game world still while panel is open
 
-    // Stop following so the manual setScroll below is not overridden by the
-    // lerp follow system on the next frame, which would cause a visible camera
-    // jump (the "map moves for a second" mobile bug).
-    cam.stopFollow();
+    if (window.PORTRAIT) {
+      // Portrait mode: UIScene renders the panel overlay in screen-space (no zoom issues)
+      this.events_bus.emit('panel-open', panel);
+      return;
+    }
 
-    // Snap the camera to the player's exact centre so panel world-coordinates
-    // map to stable screen positions.  Without this, a lerp-lagged camera
-    // (camera still catching up after a move) causes the panel to drift left
-    // and upward as the camera settles, cutting off panel content on mobile.
+    // Desktop mode: render panel in GameScene (camera zoom=1, world == screen)
+    // Snap camera to player so panel sits at a stable screen position
     if (this.playerSprite) {
       const sf = 1 / cam.zoom;
       cam.setScroll(
@@ -1395,6 +1395,9 @@ export class GameScene extends Phaser.Scene {
   _closePanel() {
     this.activePanel = PANEL.NONE;
     if (this.overlayPanel) { this.overlayPanel.destroy(); this.overlayPanel = null; }
+    if (window.PORTRAIT) {
+      this.events_bus?.emit('panel-close');
+    }
     // Resume camera follow now that the panel is closed
     if (this.playerSprite) {
       this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
@@ -1755,6 +1758,25 @@ export class GameScene extends Phaser.Scene {
     const t = this.add.text(x, y, str, cfg);
     if (panel) panel.add(t);
     return t;
+  }
+
+  /** Called by UIScene portrait skill panel to unlock a skill. */
+  _tryUnlockSkill(skillId) {
+    if (unlockSkill(this.player, skillId)) {
+      this.events_bus.emit(EV.LOG_MSG, { text: `Unlocked: ${SKILL_BY_ID[skillId]?.name}!`, color: '#ffd700' });
+      this.events_bus.emit(EV.STATS_CHANGED);
+      this._closePanel();
+      this._openPanel(PANEL.SKILLS);
+    }
+  }
+
+  /** Called by UIScene portrait crafting panel to craft an item. */
+  _tryCraft(recipeId) {
+    const result = craftItem(this.player, recipeId);
+    this.events_bus.emit(EV.LOG_MSG, { text: result.message, color: result.success ? '#ffd700' : '#ff8888' });
+    this.events_bus.emit(EV.STATS_CHANGED);
+    this._closePanel();
+    this._openPanel(PANEL.CRAFTING);
   }
 
   _onDeath() {
