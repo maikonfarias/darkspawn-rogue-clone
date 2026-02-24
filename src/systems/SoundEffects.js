@@ -44,6 +44,9 @@ class SoundEffectsEngine {
       case 'stairs-down': this._stairs(ctx, false); break;
       case 'stairs-up':   this._stairs(ctx, true);  break;
       case 'use':         this._use(ctx);        break;
+      // Town Portal
+      case 'townScroll':   this._sndTownScroll(ctx);  break;
+      case 'portalReturn': this._sndPortalReturn(ctx); break;
       // Skills
       case 'skill-magicBolt':   this._sndMagicBolt(ctx);   break;
       case 'skill-fireball':    this._sndFireball(ctx);    break;
@@ -592,6 +595,60 @@ class SoundEffectsEngine {
     pg.gain.setValueAtTime(0.001, now); pg.gain.linearRampToValueAtTime(0.3, now + 0.006);
     pg.gain.setTargetAtTime(0.001, now + 0.012, 0.12);
     ping.connect(pg); pg.connect(out); ping.start(now); ping.stop(now + 0.55);
+  }
+  /** Town Scroll — portal opening whoosh + shimmer */
+  _sndTownScroll(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.55, 0.75);
+    // Rising sweep (portal opening)
+    const sweep = this._osc(ctx, 'sine', 200);
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.001, now); sg.gain.linearRampToValueAtTime(0.7, now + 0.05);
+    sg.gain.linearRampToValueAtTime(0.001, now + 0.60);
+    sweep.frequency.setValueAtTime(200, now); sweep.frequency.exponentialRampToValueAtTime(900, now + 0.55);
+    sweep.connect(sg); sg.connect(out); sweep.start(now); sweep.stop(now + 0.65);
+    // Portal hum
+    const hum = this._osc(ctx, 'sine', 440);
+    const hg = ctx.createGain();
+    hg.gain.setValueAtTime(0.001, now + 0.10); hg.gain.linearRampToValueAtTime(0.35, now + 0.20);
+    hg.gain.linearRampToValueAtTime(0.001, now + 0.65);
+    hum.frequency.setValueAtTime(440, now + 0.10); hum.frequency.linearRampToValueAtTime(880, now + 0.60);
+    hum.connect(hg); hg.connect(out); hum.start(now + 0.10); hum.stop(now + 0.68);
+    // Sparkle tings
+    [[0.15, 2093, 0.30], [0.25, 2794, 0.25], [0.35, 3520, 0.20], [0.45, 4186, 0.15]].forEach(([t, freq, amp]) => {
+      const o = this._osc(ctx, 'sine', freq);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, now + t); g.gain.linearRampToValueAtTime(amp, now + t + 0.008);
+      g.gain.setTargetAtTime(0.001, now + t + 0.01, 0.06);
+      o.connect(g); g.connect(out); o.start(now + t); o.stop(now + t + 0.45);
+    });
+  }
+
+  /** Portal Return — descending whoosh + landing thump */
+  _sndPortalReturn(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.60, 0.65);
+    // Descending sweep (exiting portal)
+    const sweep = this._osc(ctx, 'sine', 900);
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.001, now); sg.gain.linearRampToValueAtTime(0.7, now + 0.03);
+    sg.gain.linearRampToValueAtTime(0.001, now + 0.55);
+    sweep.frequency.setValueAtTime(900, now); sweep.frequency.exponentialRampToValueAtTime(200, now + 0.50);
+    sweep.connect(sg); sg.connect(out); sweep.start(now); sweep.stop(now + 0.58);
+    // Low thump on landing
+    const thump = this._osc(ctx, 'sine', 60);
+    const tg = ctx.createGain();
+    tg.gain.setValueAtTime(0.001, now + 0.40); tg.gain.linearRampToValueAtTime(0.6, now + 0.43);
+    tg.gain.linearRampToValueAtTime(0.001, now + 0.62);
+    thump.connect(tg); tg.connect(out); thump.start(now + 0.40); thump.stop(now + 0.65);
+    // Shimmer tings (high to low — arrival echo)
+    [[0.05, 3136, 0.20], [0.12, 2637, 0.18], [0.20, 2093, 0.15]].forEach(([t, freq, amp]) => {
+      const o = this._osc(ctx, 'sine', freq);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, now + t); g.gain.linearRampToValueAtTime(amp, now + t + 0.008);
+      g.gain.setTargetAtTime(0.001, now + t + 0.01, 0.08);
+      o.connect(g); g.connect(out); o.start(now + t); o.stop(now + t + 0.50);
+    });
   }
 }
 
