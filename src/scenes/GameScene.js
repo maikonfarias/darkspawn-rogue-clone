@@ -1189,15 +1189,19 @@ export class GameScene extends Phaser.Scene {
   _stepClickWalk() {
     if (!this._clickPath.length) { this._cancelClickWalk(); return; }
 
-    // Cancel only if the next step is occupied by a visible monster —
-    // _playerMove will then attack it instead of continuing the walk.
+    // If the next step is occupied by a visible monster, attack it and cancel the walk.
     const next = this._clickPath[0];
-    const blockedByMonster = this.monsters.some(m =>
+    const blockedByMonster = this.monsters.find(m =>
       !m.isDead &&
       this.vis[m.y]?.[m.x] === VIS.VISIBLE &&
       m.x === next.x && m.y === next.y
     );
-    if (blockedByMonster) { this._cancelClickWalk(); return; }
+    if (blockedByMonster) {
+      this._cancelClickWalk();
+      this._playerAttack(blockedByMonster);
+      this._endPlayerTurn();
+      return;
+    }
 
     this._clickPath.shift();
     this._drawPathPreview();
