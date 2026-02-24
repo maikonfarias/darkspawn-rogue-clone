@@ -44,6 +44,7 @@ class SoundEffectsEngine {
       case 'stairs-down': this._stairs(ctx, false); break;
       case 'stairs-up':   this._stairs(ctx, true);  break;
       case 'use':         this._use(ctx);        break;
+      case 'elder-heal':  this._elderHeal(ctx);  break;
       // Skills
       case 'skill-magicBolt':   this._sndMagicBolt(ctx);   break;
       case 'skill-fireball':    this._sndFireball(ctx);    break;
@@ -427,6 +428,35 @@ class SoundEffectsEngine {
       o.start(now + t); o.stop(now + t + 0.40);
     });
   }
+  /** Elder healing — warm ascending chord with gentle sparkle */
+  _elderHeal(ctx) {
+    const now = ctx.currentTime;
+    const out = this._master(ctx, 0.45, 1.20);
+
+    // Warm rising chord (healing energy)
+    [[261, 0.00, 0.40], [329, 0.08, 0.35], [392, 0.16, 0.30], [523, 0.26, 0.25]].forEach(([freq, t, amp]) => {
+      const o = this._osc(ctx, 'sine', freq);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, now + t);
+      g.gain.linearRampToValueAtTime(amp, now + t + 0.06);
+      g.gain.setValueAtTime(amp * 0.7, now + t + 0.30);
+      g.gain.linearRampToValueAtTime(0.001, now + t + 0.80);
+      o.connect(g); g.connect(out);
+      o.start(now + t); o.stop(now + t + 0.85);
+    });
+
+    // Gentle sparkle tings
+    [[0.35, 2093, 0.18], [0.55, 2637, 0.15], [0.75, 3136, 0.12]].forEach(([t, freq, amp]) => {
+      const o = this._osc(ctx, 'sine', freq);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, now + t);
+      g.gain.linearRampToValueAtTime(amp, now + t + 0.008);
+      g.gain.setTargetAtTime(0.001, now + t + 0.015, 0.10);
+      o.connect(g); g.connect(out);
+      o.start(now + t); o.stop(now + t + 0.60);
+    });
+  }
+
   // ── Skill Sounds ─────────────────────────────────────────
 
   /** Magic Bolt — sharp electric zap */
