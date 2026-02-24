@@ -50,7 +50,6 @@ export const ITEMS = {
   scrollTele: { id:'scrollTele', name:'Scroll of Teleport', type:ITEM_TYPE.SCROLL, char:'?', color:C.PURPLE, effect:{teleport:true},   description:'Teleports to a random location.', value:20, weight:0 },
   scrollId:   { id:'scrollId',   name:'Scroll of Identify', type:ITEM_TYPE.SCROLL, char:'?', color:C.CYAN,   effect:{identify:true},   description:'Identifies an unknown item.', value:15, weight:0 },
   scrollFire: { id:'scrollFire', name:'Scroll of Fire',     type:ITEM_TYPE.SCROLL, char:'?', color:C.ORANGE, effect:{fireball:true},   description:'Unleashes a fireball.', value:30, weight:0 },
-  townScroll: { id:'townScroll', name:'Town Scroll',         type:ITEM_TYPE.SCROLL, char:'?', color:C.BLUE,   effect:{townPortal:true}, description:'Teleports you to town. Leaves a blue portal to return.', value:40, weight:0, singleDrop:true },
 
   // ── Materials (for crafting) ────────────────────────────────
   wood:       { id:'wood',       name:'Wood',              type:ITEM_TYPE.MATERIAL, char:'%', color:C.BROWN,  description:'A piece of sturdy wood.', value:2,  weight:2 },
@@ -80,21 +79,21 @@ export const FLOOR_ITEM_TABLES = [
   // floor 1
   [{ id:'potionHpS', weight:4 }, { id:'wood', weight:3 }, { id:'stone', weight:3 }, { id:'ironOre', weight:2 }, { id:'dagger', weight:2 }, { id:'leatherArmor', weight:1 }],
   // floor 2
-  [{ id:'potionHpS', weight:3 }, { id:'potionHpM', weight:2 }, { id:'ironOre', weight:3 }, { id:'wood', weight:2 }, { id:'shortSword', weight:2 }, { id:'leatherArmor', weight:2 }, { id:'townScroll', weight:1 }],
+  [{ id:'potionHpS', weight:3 }, { id:'potionHpM', weight:2 }, { id:'ironOre', weight:3 }, { id:'wood', weight:2 }, { id:'shortSword', weight:2 }, { id:'leatherArmor', weight:2 }],
   // floor 3
-  [{ id:'potionHpM', weight:3 }, { id:'ironIngot', weight:2 }, { id:'leatherHide', weight:3 }, { id:'chainMail', weight:1 }, { id:'antidote', weight:2 }, { id:'scrollMap', weight:1 }, { id:'townScroll', weight:1 }],
+  [{ id:'potionHpM', weight:3 }, { id:'ironIngot', weight:2 }, { id:'leatherHide', weight:3 }, { id:'chainMail', weight:1 }, { id:'antidote', weight:2 }, { id:'scrollMap', weight:1 }],
   // floor 4
-  [{ id:'potionHpM', weight:3 }, { id:'potionMana', weight:2 }, { id:'ironIngot', weight:3 }, { id:'crystal', weight:1 }, { id:'longSword', weight:1 }, { id:'scrollTele', weight:1 }, { id:'townScroll', weight:1 }],
+  [{ id:'potionHpM', weight:3 }, { id:'potionMana', weight:2 }, { id:'ironIngot', weight:3 }, { id:'crystal', weight:1 }, { id:'longSword', weight:1 }, { id:'scrollTele', weight:1 }],
   // floor 5
-  [{ id:'potionHpL', weight:2 }, { id:'potionMana', weight:2 }, { id:'crystal', weight:2 }, { id:'bone', weight:2 }, { id:'battleAxe', weight:1 }, { id:'ironRing', weight:2 }, { id:'boneAmulet', weight:1 }, { id:'townScroll', weight:1 }],
+  [{ id:'potionHpL', weight:2 }, { id:'potionMana', weight:2 }, { id:'crystal', weight:2 }, { id:'bone', weight:2 }, { id:'battleAxe', weight:1 }, { id:'ironRing', weight:2 }, { id:'boneAmulet', weight:1 }],
   // floor 6
-  [{ id:'potionHpL', weight:3 }, { id:'crystal', weight:3 }, { id:'gemRuby', weight:1 }, { id:'gemSapphire', weight:1 }, { id:'plateArmor', weight:1 }, { id:'goldRing', weight:1 }, { id:'townScroll', weight:1 }],
+  [{ id:'potionHpL', weight:3 }, { id:'crystal', weight:3 }, { id:'gemRuby', weight:1 }, { id:'gemSapphire', weight:1 }, { id:'plateArmor', weight:1 }, { id:'goldRing', weight:1 }],
   // floor 7
-  [{ id:'potionHpL', weight:3 }, { id:'scrollFire', weight:2 }, { id:'mageStaff', weight:1 }, { id:'mageRobe', weight:1 }, { id:'rubyRing', weight:1 }, { id:'moonstone', weight:1 }, { id:'townScroll', weight:1 }],
+  [{ id:'potionHpL', weight:3 }, { id:'scrollFire', weight:2 }, { id:'mageStaff', weight:1 }, { id:'mageRobe', weight:1 }, { id:'rubyRing', weight:1 }, { id:'moonstone', weight:1 }],
   // floor 8
-  [{ id:'potionHpL', weight:3 }, { id:'potionMana', weight:3 }, { id:'warHammer', weight:1 }, { id:'dragonScale2', weight:2 }, { id:'dragonEye', weight:1 }, { id:'townScroll', weight:1 }],
+  [{ id:'potionHpL', weight:3 }, { id:'potionMana', weight:3 }, { id:'warHammer', weight:1 }, { id:'dragonScale2', weight:2 }, { id:'dragonEye', weight:1 }],
   // floor 9
-  [{ id:'potionHpL', weight:4 }, { id:'runicBlade', weight:1 }, { id:'dragonScale', weight:1 }, { id:'dragonEye', weight:1 }, { id:'scrollFire', weight:2 }, { id:'townScroll', weight:1 }],
+  [{ id:'potionHpL', weight:4 }, { id:'runicBlade', weight:1 }, { id:'dragonScale', weight:1 }, { id:'dragonEye', weight:1 }, { id:'scrollFire', weight:2 }],
   // floor 10 (boss)
   [{ id:'potionHpL', weight:4 }, { id:'runicBlade', weight:1 }, { id:'dragonScale', weight:1 }],
 ];

@@ -718,7 +718,6 @@ function genItemTextures(scene) {
   genItem('scrollTele', g => mkScroll(g, 0x7733bb));
   genItem('scrollId',   g => mkScroll(g, 0x2288aa));
   genItem('scrollFire', g => mkScroll(g, 0xcc4400));
-  genItem('townScroll', g => mkScroll(g, 0x1155dd));
 
   // ─── RINGS (band + gem color) ─────────────────────────────────
 
@@ -1070,24 +1069,6 @@ function genFog(scene) {
 
 import { MONSTERS } from '../data/MonsterData.js';
 
-function genTownPortal(scene) {
-  const g = scene.make.graphics({ add: false });
-  // Dark background
-  g.fillStyle(0x000011, 1); g.fillRect(0, 0, T, T);
-  // Outer glow ring (deep blue)
-  g.fillStyle(0x002299, 1); g.fillEllipse(T / 2, T / 2, T - 4, T - 4);
-  // Mid swirl (bright blue)
-  g.fillStyle(0x1155ff, 1); g.fillEllipse(T / 2, T / 2, T - 10, T - 10);
-  // Inner ring (lighter)
-  g.fillStyle(0x5599ff, 1); g.fillEllipse(T / 2, T / 2, T - 18, T - 18);
-  // Bright core
-  g.fillStyle(0xaaccff, 1); g.fillEllipse(T / 2, T / 2, T - 24, T - 24);
-  // White center
-  g.fillStyle(0xffffff, 1); g.fillEllipse(T / 2, T / 2, 8, 8);
-  g.generateTexture('town-portal', T, T);
-  g.destroy();
-}
-
 export function generateAllTextures(scene) {
   genVoid(scene);
   genWall(scene);
@@ -1106,7 +1087,6 @@ export function generateAllTextures(scene) {
   genEffects(scene);
   genItemTextures(scene);
   genSkillIcons(scene);
-  genTownPortal(scene);
 
   for (const [id, def] of Object.entries(MONSTERS)) {
     genMonster(scene, id, def);
