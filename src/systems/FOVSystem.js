@@ -13,7 +13,7 @@ const OCTANT_MULT = [
 
 function isOpaque(grid, x, y) {
   if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return true;
-  return grid[y][x] === TILE.WALL || grid[y][x] === TILE.VOID;
+  return grid[y][x] === TILE.WALL || grid[y][x] === TILE.VOID || grid[y][x] === TILE.DOOR;
 }
 
 function castLight(vis, grid, cx, cy, row, startSlope, endSlope, radius, xx, xy, yx, yy) {
