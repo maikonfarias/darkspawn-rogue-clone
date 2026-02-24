@@ -90,19 +90,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   update() {
-    if (this.activePanel !== PANEL.NONE || this.targeting || this.gamePaused) return;
+    if (this.activePanel !== PANEL.NONE || this.gamePaused) return;
 
     const now = Date.now();
 
-    // ── Keyboard hold-to-walk ─────────────────────────────
-    for (const [code, pressTime] of Object.entries(this.heldKeys)) {
-      const dir = this.moveKeys[code];
-      if (!dir) continue;
-      const held = now - pressTime;
-      if (held >= this.keyRepeat && now - this.lastMoveTime >= this.keyInterval) {
-        this._playerMove(dir.dx, dir.dy);
-        this.lastMoveTime = now;
-        break;
+    // ── Keyboard hold-to-walk (skip while targeting) ──────
+    if (!this.targeting) {
+      for (const [code, pressTime] of Object.entries(this.heldKeys)) {
+        const dir = this.moveKeys[code];
+        if (!dir) continue;
+        const held = now - pressTime;
+        if (held >= this.keyRepeat && now - this.lastMoveTime >= this.keyInterval) {
+          this._playerMove(dir.dx, dir.dy);
+          this.lastMoveTime = now;
+          break;
+        }
       }
     }
 
@@ -133,15 +135,34 @@ export class GameScene extends Phaser.Scene {
           if (pad.buttons[bi]?.pressed) { anyInput = true; break; }
         }
 
-        // A button (index 0) — just-pressed edge: maps to Space / default action
+        // Face buttons: A(0) B(1) X(2) Y(3)
         const aPressed = !!pad.buttons[0]?.pressed;
-        if (aPressed && !prev[0] && this._controllerMode) {
-          this._cancelClickWalk();
-          this._playerDefaultAction();
+        const bPressed = !!pad.buttons[1]?.pressed;
+        const xPressed = !!pad.buttons[2]?.pressed;
+        const yPressed = !!pad.buttons[3]?.pressed;
+
+        if (this._controllerMode) {
+          if (this.targeting) {
+            // B cancels targeting mode
+            if (bPressed && !prev[1]) {
+              this._cancelTargeting();
+              const ui = this.scene.get(SCENE.UI);
+              ui?._clearSkillSelection?.();
+            }
+            // A confirms cast at pad cursor position
+            if (aPressed && !prev[0]) this._confirmPadTarget();
+          } else {
+            // A → default action
+            if (aPressed && !prev[0]) { this._cancelClickWalk(); this._playerDefaultAction(); }
+            // X → hotbar skill 0 (first unlocked active skill)
+            if (xPressed && !prev[2]) this._triggerPadHotbarSkill(0);
+            // Y → hotbar skill 1 (second unlocked active skill)
+            if (yPressed && !prev[3]) this._triggerPadHotbarSkill(1);
+          }
         }
 
         // Store this frame's state for next frame edge detection
-        this._padPrevButtons[pi] = { 0: aPressed };
+        this._padPrevButtons[pi] = { 0: aPressed, 1: bPressed, 2: xPressed, 3: yPressed };
       }
 
       // First time we see any input: activate controller mode and eat the frame
@@ -156,22 +177,41 @@ export class GameScene extends Phaser.Scene {
       gdx = Math.sign(gdx);
       gdy = Math.sign(gdy);
 
-      if (gdx !== 0 || gdy !== 0) {
-        this._cancelClickWalk();
-        if (this._padHeldSince === null) {
-          // First frame — move immediately
-          this._padHeldSince = now;
-          this._playerMove(gdx, gdy);
-          this.lastMoveTime = now;
-        } else {
-          const held = now - this._padHeldSince;
-          if (held >= this.keyRepeat && now - this.lastMoveTime >= this.keyInterval) {
-            this._playerMove(gdx, gdy);
-            this.lastMoveTime = now;
+      if (this.targeting) {
+        // In targeting mode: D-pad / stick moves the spell cursor, not the player
+        if (gdx !== 0 || gdy !== 0) {
+          if (this._padTargetNavHeld === null) {
+            this._padTargetNavHeld = now;
+            this._padTargetNavLast = now;
+            this._movePadTarget(gdx, gdy);
+          } else if (
+            now - this._padTargetNavHeld  >= 380 &&
+            now - this._padTargetNavLast  >= 160
+          ) {
+            this._padTargetNavLast = now;
+            this._movePadTarget(gdx, gdy);
           }
+        } else {
+          this._padTargetNavHeld = null;
         }
       } else {
-        this._padHeldSince = null;
+        if (gdx !== 0 || gdy !== 0) {
+          this._cancelClickWalk();
+          if (this._padHeldSince === null) {
+            // First frame — move immediately
+            this._padHeldSince = now;
+            this._playerMove(gdx, gdy);
+            this.lastMoveTime = now;
+          } else {
+            const held = now - this._padHeldSince;
+            if (held >= this.keyRepeat && now - this.lastMoveTime >= this.keyInterval) {
+              this._playerMove(gdx, gdy);
+              this.lastMoveTime = now;
+            }
+          }
+        } else {
+          this._padHeldSince = null;
+        }
       }
     }
   }
@@ -593,6 +633,11 @@ export class GameScene extends Phaser.Scene {
     this._padPrevButtons = {}; // padIndex → { buttonIndex → wasPressed }
     // Controller mode: false until any pad input is detected for the first time
     this._controllerMode = false;
+    // Gamepad targeting cursor state
+    this._padTargetX          = 0;
+    this._padTargetY          = 0;
+    this._padTargetNavHeld    = null;
+    this._padTargetNavLast    = 0;
 
     this.input.on('pointerdown', (ptr) => this._onPointerDown(ptr));
     this.input.on('pointerdown', (ptr) => { if (ptr.rightButtonDown()) this._cancelClickWalk(); });
@@ -1257,6 +1302,10 @@ export class GameScene extends Phaser.Scene {
     if (!this.targeting) return;
     const wp = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
     const tx = Math.floor(wp.x / T), ty = Math.floor(wp.y / T);
+    this._drawTargetPreview(tx, ty);
+  }
+
+  _drawTargetPreview(tx, ty) {
     if (this._targetCursor) {
       this._targetCursor.setPosition(tx * T + T / 2, ty * T + T / 2).setVisible(true);
     }
@@ -1274,6 +1323,44 @@ export class GameScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  /** Move the gamepad targeting reticle by (dx, dy) tiles and refresh the visual. */
+  _movePadTarget(dx, dy) {
+    this._padTargetX = Math.max(0, Math.min(MAP_W - 1, this._padTargetX + dx));
+    this._padTargetY = Math.max(0, Math.min(MAP_H - 1, this._padTargetY + dy));
+    this._drawTargetPreview(this._padTargetX, this._padTargetY);
+  }
+
+  /** Trigger hotbar skill at position `idx` (0-based) via the gamepad. */
+  _triggerPadHotbarSkill(idx) {
+    if (this.gamePaused || this.activePanel !== PANEL.NONE) return;
+    const ui = this.scene.get(SCENE.UI);
+    const skillId = ui?._hotbarSkills?.[idx];
+    if (!skillId) return;
+    // Same skill button pressed while already targeting → cancel
+    if (this.targeting && this.targetExtra?.skillId === skillId) {
+      this._cancelTargeting();
+      ui?._clearSkillSelection?.();
+      return;
+    }
+    // Delegate to UIScene (handles mana check, hotbar highlight, _enterTargetingMode)
+    ui?._useHotbarSkill(skillId);
+    // If the skill entered targeting mode, seed the pad cursor at the player's position
+    if (this.targeting) {
+      this._padTargetX       = this.player.x;
+      this._padTargetY       = this.player.y;
+      this._padTargetNavHeld = null;
+      this._drawTargetPreview(this._padTargetX, this._padTargetY);
+    }
+  }
+
+  /** Confirm the gamepad targeting reticle — cast the spell at the current pad cursor tile. */
+  _confirmPadTarget() {
+    if (!this.targeting) return;
+    const tx = this._padTargetX;
+    const ty = this._padTargetY;
+    this._castAtTile(tx, ty);
   }
 
   // ── Click-to-walk ─────────────────────────────────────────
@@ -1399,7 +1486,14 @@ export class GameScene extends Phaser.Scene {
     // Targeting mode (skill aim): handle spell click
     const wp = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
     const tx = Math.floor(wp.x / T), ty = Math.floor(wp.y / T);
+    this._castAtTile(tx, ty);
+  }
 
+  /**
+   * Execute the currently-pending targeted spell at world tile (tx, ty).
+   * Called by both mouse click (_onPointerDown) and gamepad confirm (_confirmPadTarget).
+   */
+  _castAtTile(tx, ty) {
     if (this._targetCursor) { this._targetCursor.destroy(); this._targetCursor = null; }
     this.input.off('pointermove', this._onTargetMove, this);
     this.targeting = false;
