@@ -2,8 +2,9 @@
 //  Darkspawn Rogue Quest — Game Scene (Main Gameplay)
 // ============================================================
 import { SCENE, TILE, VIS, EV, TILE_SIZE, MAP_W, MAP_H,
-         DUNGEON_CFG, ITEM_TYPE, AI, C } from '../data/Constants.js';
+         DUNGEON_CFG, ITEM_TYPE, AI, C, DIR4 } from '../data/Constants.js';
 import { generateDungeon } from '../systems/DungeonGenerator.js';
+import { generateTown } from '../systems/TownGenerator.js';
 import { computeFOV, createVisGrid, revealAll } from '../systems/FOVSystem.js';
 import { Player } from '../entities/Player.js';
 import { Monster } from '../entities/Monster.js';
@@ -40,7 +41,7 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('events', this.events_bus);
     this.registry.set('scene', this);
 
-    this.floor = 1;
+    this.floor = 0; // 0 = town, 1-10 = dungeon floors
     this.player = new Player(this.events_bus);
     this.activePanel = PANEL.NONE;
     this.pendingSkillEffect = null;
@@ -131,6 +132,20 @@ export class GameScene extends Phaser.Scene {
       const pos = fromBelow ? cached.endPos : cached.startPos;
       this.player.x = pos.x;
       this.player.y = pos.y;
+    } else if (floorNum === 0) {
+      // Generate the fixed starting town
+      const town = generateTown();
+      this.grid           = town.grid;
+      this.rooms          = town.rooms;
+      this.vis            = createVisGrid();
+      this._floorStartPos = town.startPos;
+      this._floorEndPos   = town.endPos;
+      // Player always starts at the town's designated start position
+      const pos = fromBelow ? town.endPos : town.startPos;
+      this.player.x = pos.x;
+      this.player.y = pos.y;
+      this.monsters   = [];
+      this.floorItems = [];
     } else {
       // Generate dungeon
       const dungeon = generateDungeon(floorNum);
@@ -174,12 +189,16 @@ export class GameScene extends Phaser.Scene {
     this.events_bus.emit(EV.FLOOR_CHANGED, { floor: floorNum });
     this.events_bus.emit(EV.STATS_CHANGED);
     this.events_bus.emit(EV.LOG_MSG, {
-      text: floorNum === 1 && !cached
-        ? `Welcome to the dungeon! Find the stairs (>) to descend.`
-        : cached
-          ? `You return to floor ${floorNum}.`
-          : `Floor ${floorNum}. The air grows colder...`,
-      color: '#88aacc'
+      text: floorNum === 0 && !cached
+        ? `Welcome to town! Enter the left building to start your adventure.`
+        : floorNum === 0
+          ? `You return to town.`
+          : floorNum === 1 && !cached
+            ? `Floor ${floorNum}. The dungeon stretches before you...`
+            : cached
+              ? `You return to floor ${floorNum}.`
+              : `Floor ${floorNum}. The air grows colder...`,
+      color: floorNum === 0 ? '#88cc88' : '#88aacc'
     });
 
     if (floorNum === DUNGEON_CFG.FLOORS) {
@@ -564,7 +583,7 @@ export class GameScene extends Phaser.Scene {
 
     // Check tile passability
     const t = this.grid[ny][nx];
-    if (t === TILE.WALL || t === TILE.VOID) return;
+    if (t === TILE.WALL || t === TILE.VOID || t === TILE.NPC) return;
 
     // Open doors
     if (t === TILE.DOOR) {
@@ -593,6 +612,9 @@ export class GameScene extends Phaser.Scene {
     // Move
     this.player.x = nx;
     this.player.y = ny;
+
+    // Check for adjacent NPC in town
+    this._checkNPCAdjacency();
 
     // Auto-pickup all items on this tile
     const itemsHere = this.floorItems.filter(f => f.x === nx && f.y === ny);
@@ -702,6 +724,22 @@ export class GameScene extends Phaser.Scene {
     this._endPlayerTurn();
   }
 
+  /** Show NPC dialogue when player stands adjacent to the town elder. */
+  _checkNPCAdjacency() {
+    const { x, y } = this.player;
+    for (const { dx, dy } of DIR4) {
+      const nx = x + dx, ny = y + dy;
+      if (nx >= 0 && ny >= 0 && nx < MAP_W && ny < MAP_H &&
+          this.grid[ny][nx] === TILE.NPC) {
+        this.events_bus.emit(EV.LOG_MSG, {
+          text: '🧙 Elder: "Stay a while and listen..."',
+          color: '#ddaaff',
+        });
+        return;
+      }
+    }
+  }
+
   _saveCurrentFloor() {
     if (!this.grid) return;
     this.floorCache.set(this.floor, {
@@ -756,7 +794,7 @@ export class GameScene extends Phaser.Scene {
     this._updateFOV();
 
     this.events_bus.emit(EV.LOG_MSG, {
-      text: `Save loaded — Floor ${data.floor}. Welcome back!`,
+      text: `Save loaded — ${data.floor === 0 ? 'Town' : `Floor ${data.floor}`}. Welcome back!`,
       color: '#88ffcc',
     });
   }
@@ -781,8 +819,8 @@ export class GameScene extends Phaser.Scene {
       this.events_bus.emit(EV.LOG_MSG, { text: 'No upward stairs here.', color: '#556677' });
       return;
     }
-    if (this.floor <= 1) {
-      this.events_bus.emit(EV.LOG_MSG, { text: 'You are already on the first floor.', color: '#556677' });
+    if (this.floor <= 0) {
+      this.events_bus.emit(EV.LOG_MSG, { text: 'You are already in town.', color: '#556677' });
       return;
     }
     SFX.play('stairs-up');

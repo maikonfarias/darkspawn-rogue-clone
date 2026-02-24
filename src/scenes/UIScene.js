@@ -60,7 +60,7 @@ export class UIScene extends Phaser.Scene {
     this._refreshEquipPanel();
     // Sync floor text and minimap directly in case events fired before we were ready
     const gs = this.scene.get(SCENE.GAME);
-    if (gs?.floor) this._refreshFloor(gs.floor);
+    if (gs?.floor !== undefined) this._refreshFloor(gs.floor);
     if (gs?.grid)  this._updateMinimap();
   }
 
@@ -841,6 +841,8 @@ export class UIScene extends Phaser.Scene {
           else if (t === TILE.CHEST_CLOSED) color = 0xffd700;
           else if (t === TILE.CHEST_OPEN)  color = 0x886600;
           else if (t === TILE.TRAP_VISIBLE) color = 0xff4444;
+          else if (t === TILE.GRASS)       color = 0x2d6a1f;
+          else if (t === TILE.NPC)         color = 0xddaaff;
           else                             color = 0x334455; // floor
         }
 
@@ -909,7 +911,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   _refreshFloor(floor) {
-    this.floorText?.setText(`Floor: ${floor}`);
+    this.floorText?.setText(floor === 0 ? 'Town' : `Floor: ${floor}`);
   }
 
   _addLog({ text, color = '#ccddee' }) {

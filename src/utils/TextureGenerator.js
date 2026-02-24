@@ -185,6 +185,39 @@ function genVoid(scene) {
   g.destroy();
 }
 
+function genGrass(scene) {
+  const g = scene.make.graphics({ add: false });
+  g.fillStyle(0x2d6a1f, 1); g.fillRect(0, 0, T, T);
+  // Grass tufts
+  g.fillStyle(0x3a8426, 1);
+  g.fillRect(3, 5, 3, 5); g.fillRect(12, 2, 2, 6); g.fillRect(22, 8, 3, 4);
+  g.fillRect(6, 18, 2, 5); g.fillRect(18, 15, 3, 5); g.fillRect(27, 20, 2, 4);
+  g.fillRect(2, 26, 3, 4); g.fillRect(14, 24, 2, 5); g.fillRect(25, 28, 3, 3);
+  g.fillStyle(0x4aaa30, 1);
+  g.fillRect(4, 4, 1, 4); g.fillRect(13, 1, 1, 5); g.fillRect(23, 7, 1, 3);
+  g.fillRect(7, 17, 1, 4); g.fillRect(19, 14, 1, 4); g.fillRect(28, 19, 1, 3);
+  g.generateTexture('tile-grass', T, T);
+  g.destroy();
+}
+
+function genNPC(scene) {
+  const g = scene.make.graphics({ add: false });
+  g.fillStyle(0x000000, 0); g.fillRect(0, 0, T, T);
+  // Robe / body
+  g.fillStyle(0x663399, 1); g.fillRect(8, 14, 16, 14);
+  g.fillStyle(0x7744bb, 1); g.fillRect(9, 14, 14, 5);
+  // Hood / head
+  g.fillStyle(0xd4a96a, 1); g.fillRect(10, 5, 12, 10);
+  g.fillStyle(0x553388, 1); g.fillRect(8, 2, 16, 8);
+  // Eyes
+  g.fillStyle(0xffd700, 1); g.fillRect(12, 9, 3, 2); g.fillRect(17, 9, 3, 2);
+  // Staff
+  g.fillStyle(0x8b6914, 1); g.fillRect(3, 4, 2, 24);
+  g.fillStyle(0x44ddff, 1); g.fillCircle(4, 4, 4);
+  g.generateTexture('tile-npc', T, T);
+  g.destroy();
+}
+
 // ── Character Sprites (32×32) ─────────────────────────────────
 
 function genPlayer(scene) {
@@ -1040,6 +1073,8 @@ export function generateAllTextures(scene) {
   genVoid(scene);
   genWall(scene);
   genFloor(scene);
+  genGrass(scene);
+  genNPC(scene);
   genDoor(scene);
   genStairsDown(scene);
   genStairsUp(scene);
@@ -1072,4 +1107,6 @@ export const TILE_TEXTURE = {
   '8':  'tile-chest-open',
   '9':  'tile-floor',   // hidden trap looks like floor
   '10': 'tile-floor',   // visible trap (tinted at render time)
+  '11': 'tile-grass',
+  '12': 'tile-npc',
 };

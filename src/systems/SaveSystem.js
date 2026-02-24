@@ -149,6 +149,6 @@ export function saveTimestamp() {
     if (!raw) return null;
     const { timestamp, floor } = JSON.parse(raw);
     const d = new Date(timestamp);
-    return `Floor ${floor} — ${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+    return `${floor === 0 ? 'Town' : `Floor ${floor}`} — ${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
   } catch { return null; }
 }
