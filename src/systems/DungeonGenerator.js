@@ -169,12 +169,10 @@ export function generateDungeon(floor) {
   // Shuffle rooms for random start/end
   const shuffled = shuffle([...rooms]);
 
-  // Stairs up in first room (or skip on floor 1)
+  // Stairs up in first room
   const startRoom = shuffled[0];
   const startPos = center(startRoom);
-  if (floor > 1) {
-    grid[startPos.y][startPos.x] = TILE.STAIRS_UP;
-  }
+  grid[startPos.y][startPos.x] = TILE.STAIRS_UP;
 
   // Stairs down in last room
   const endRoom = shuffled[shuffled.length - 1];
@@ -238,7 +236,7 @@ export function isPassable(grid, x, y) {
   const t = grid[y][x];
   return t === TILE.FLOOR || t === TILE.DOOR || t === TILE.STAIRS_DOWN ||
          t === TILE.STAIRS_UP || t === TILE.CHEST_OPEN ||
-         t === TILE.TRAP_HIDDEN || t === TILE.TRAP_VISIBLE;
+         t === TILE.TRAP_HIDDEN || t === TILE.TRAP_VISIBLE || t === TILE.GRASS;
 }
 
 export function isWalkable(grid, x, y) {
@@ -246,5 +244,6 @@ export function isWalkable(grid, x, y) {
   if (!inBounds(x, y)) return false;
   const t = grid[y][x];
   return t === TILE.FLOOR || t === TILE.DOOR || t === TILE.STAIRS_DOWN ||
-         t === TILE.STAIRS_UP || t === TILE.TRAP_HIDDEN || t === TILE.TRAP_VISIBLE;
+         t === TILE.STAIRS_UP || t === TILE.TRAP_HIDDEN || t === TILE.TRAP_VISIBLE ||
+         t === TILE.GRASS;
 }

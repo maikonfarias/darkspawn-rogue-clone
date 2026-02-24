@@ -20,6 +20,8 @@ export const TILE = Object.freeze({
   CHEST_OPEN:    8,
   TRAP_HIDDEN:   9,
   TRAP_VISIBLE: 10,
+  GRASS:        11,
+  NPC:          12,
 });
 
 // ── FOV States ───────────────────────────────────────────────
