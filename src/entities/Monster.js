@@ -47,7 +47,7 @@ export class Monster {
     const { grid, player, monsters, events, vis } = ctx;
 
     // Status effects: freeze/stun skip turn
-    const msgs = tickStatusEffects(this);
+    const msgs = tickStatusEffects(this, events);
     for (const m of msgs) events.emit(EV.LOG_MSG, m);
     if (this.isDead) return false;
 

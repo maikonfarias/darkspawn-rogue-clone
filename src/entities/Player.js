@@ -198,10 +198,10 @@ export class Player {
     const item = this.inventory[slotIndex];
     if (!item || !item.slot) return false;
 
-    // Swap old equipped item back to inventory
+    // Swap old equipped item back to inventory (don't return placeholder fists/rags)
     const old = this.equipment[item.slot];
     this.equipment[item.slot] = item;
-    this.inventory[slotIndex] = old; // may be null
+    this.inventory[slotIndex] = (old && old.id !== 'fists' && old.id !== 'rags') ? old : null;
 
     this.events.emit(EV.LOG_MSG, { text: `Equipped ${item.name}.`, color: '#88ddff' });
     this.refreshStats();
@@ -210,7 +210,7 @@ export class Player {
 
   unequipItem(slot) {
     const item = this.equipment[slot];
-    if (!item) return false;
+    if (!item || item.id === 'fists' || item.id === 'rags') return false;
     const added = addToInventory(this, item);
     if (!added) {
       this.events.emit(EV.LOG_MSG, { text: 'Inventory full!', color: '#ff8888' });
@@ -224,7 +224,7 @@ export class Player {
   // ── Turn ─────────────────────────────────────────────────
 
   onTurnEnd() {
-    const msgs = tickStatusEffects(this);
+    const msgs = tickStatusEffects(this, this.events);
     for (const m of msgs) this.events.emit(EV.LOG_MSG, m);
 
     // Expire timed buffs

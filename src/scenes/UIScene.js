@@ -33,7 +33,7 @@ export class UIScene extends Phaser.Scene {
 
     this._buildHUD();
 
-    this.bus.on(EV.STATS_CHANGED,  () => this._refreshStats());
+    this.bus.on(EV.STATS_CHANGED,  () => { this._refreshStats(); this._refreshEquipPanel(); });
     this.bus.on(EV.LOG_MSG,        (msg) => this._addLog(msg));
     this.bus.on(EV.FLOOR_CHANGED,  ({ floor }) => { this._refreshFloor(floor); this._updateMinimap(); });
     this.bus.on(EV.MINIMAP_UPDATE, () => this._updateMinimap());
@@ -56,14 +56,22 @@ export class UIScene extends Phaser.Scene {
 
     this._refreshStats();
     this._refreshInventory();
+    this._refreshEquipPanel();
+    // Sync floor text and minimap directly in case events fired before we were ready
+    const gs = this.scene.get(SCENE.GAME);
+    if (gs?.floor) this._refreshFloor(gs.floor);
+    if (gs?.grid)  this._updateMinimap();
   }
 
   _buildHUD() {
     const W = this.cameras.main.width;
     const H = this.cameras.main.height;
 
+    // Disable browser right-click context menu over the canvas
+    this.input.mouse?.disableContextMenu();
+
     // ── Top-right stats panel ───────────────────────────────
-    const PW = 210, PH = 310;
+    const PW = 210, PH = 240;
     const PX = W - PW - 6, PY = 6;
 
     this.statsBg = this.add.rectangle(PX + PW / 2, PY + PH / 2, PW, PH, 0x0d1117, 0.88)
@@ -102,19 +110,15 @@ export class UIScene extends Phaser.Scene {
     this.spdText  = tx(8, 178, 'SPD:  4', '#ffff88', 12);
     this.goldText = tx(8, 192, 'Gold: 0', '#ffd700', 12);
 
-    // Equipment
-    tx(8, 210, '── Equipment ──', '#445566', 11);
-    this.equipWpn = tx(8, 224, 'WPN: Fists', '#cccccc', 11);
-    this.equipArm = tx(8, 236, 'ARM: Rags',  '#cccccc', 11);
-    this.equipRng = tx(8, 248, 'RNG: None',  '#cccccc', 11);
-    this.equipAmu = tx(8, 260, 'AMU: None',  '#cccccc', 11);
-
     // Controls hint
-    tx(8, 280, '[K]kills [C]raft [P]char [I]detail', '#334455', 10);
-    tx(8, 292, 'WASD  [M]ap  1–8:skills  [Space]=act', '#334455', 10);
+    tx(8, 208, '[K]kills [C]raft [P]char [I]detail', '#334455', 10);
+    tx(8, 220, 'WASD  [M]ap  1–8:skills  [Space]=act', '#334455', 10);
 
-    // ── Always-visible Inventory (below stats panel) ─────────
-    this._buildInvPanel(W, PX, PY + PH);
+    // ── Equipment panel (below stats panel) ─────────────────
+    const equipBottom = this._buildEquipPanel(W, PX, PY + PH);
+
+    // ── Always-visible Inventory (below equipment panel) ─────
+    this._buildInvPanel(W, PX, equipBottom);
 
     // ── Skill Hotbar (above log, bottom-centre) ───────────────
     this._buildSkillHotbar(W, H);
@@ -137,6 +141,9 @@ export class UIScene extends Phaser.Scene {
     }
     this.logMessages = [];
 
+    // ── Drag & Drop system (global pointer listeners) ────────
+    this._initDragSystem();
+
     // ── Pause button (top-centre) ────────────────────────────
     const pauseBtn = this.add.text(W / 2, 8, '[ ❚❚ PAUSE ]', {
       fontFamily: 'Courier New', fontSize: '13px', color: '#88aacc',
@@ -145,6 +152,18 @@ export class UIScene extends Phaser.Scene {
     pauseBtn.on('pointerover', () => pauseBtn.setColor('#ffd700'));
     pauseBtn.on('pointerout',  () => pauseBtn.setColor('#88aacc'));
     pauseBtn.on('pointerdown', () => this.bus.emit(EV.PAUSE_GAME));
+
+    // ── UI click-blocker zones (prevent walking through static panels) ──
+    const TW_BLK = 188; // tooltip panel width
+    const uiBlock = (x, y, w, h) =>
+      this.add.zone(x + w / 2, y + h / 2, w, h)
+        .setScrollFactor(0).setDepth(3).setInteractive();
+    // Right column: stats + equip + inv only (tooltip column blocks itself when visible)
+    uiBlock(PX - 6, 0, PW + 18, H);
+    // Minimap (top-left)
+    uiBlock(0, 0, MM_X + MM_W + 12, MM_Y + MM_H + 30);
+    // Bottom hotbar + log
+    uiBlock(0, H - 150, W, 150);
   }
 
   // ── Skill Hotbar ─────────────────────────────────────────
@@ -171,10 +190,37 @@ export class UIScene extends Phaser.Scene {
     this._hotbarSlotObjects = [];
     this._selectedSkillId = null;  // two-click selection state
 
+    // ── Skills menu button (right of hotbar) ────────────────
+    const SBTN_X = W / 2 + (panelW - 16) / 2 + GAP + SZ / 2 + 4;
+    const skillsBg = this.add.rectangle(SBTN_X, HB_Y + SZ / 2, SZ, SZ, 0x161628, 1)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(4)
+      .setInteractive({ useHandCursor: true });
+    this.add.text(SBTN_X, HB_Y + SZ / 2 - 6, 'SKILLS', {
+      fontFamily: 'Courier New', fontSize: '8px', color: '#556688',
+    }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(5);
+    this.add.text(SBTN_X, HB_Y + SZ / 2 + 7, '[K]', {
+      fontFamily: 'Courier New', fontSize: '9px', color: '#334455',
+    }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(5);
+    this._skillsBadge = this.add.text(SBTN_X + SZ / 2 - 3, HB_Y, '', {
+      fontFamily: 'Courier New', fontSize: '11px', color: '#ffd700',
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(4);
+    skillsBg.on('pointerover', () => skillsBg.setFillStyle(0x22223a));
+    skillsBg.on('pointerout',  () => skillsBg.setFillStyle(0x161628));
+    skillsBg.on('pointerdown', () => {
+      const gs = this.scene.get(SCENE.GAME);
+      if (gs && !gs.gamePaused) gs._openPanel(2); // PANEL.SKILLS = 2
+    });
+
     this._refreshSkillHotbar();
   }
 
   _refreshSkillHotbar() {
+    // Update skill-points badge on the skills button
+    if (this._skillsBadge) {
+      const _gs = this.scene.get(SCENE.GAME);
+      const pts = _gs?.player?.skillPoints ?? 0;
+      this._skillsBadge.setText(pts > 0 ? String(pts) : '').setVisible(pts > 0);
+    }
     // Destroy previous slot visuals
     if (this._hotbarSlotObjects) {
       for (const o of this._hotbarSlotObjects) { try { o.destroy(); } catch (_) {} }
@@ -310,10 +356,16 @@ export class UIScene extends Phaser.Scene {
     this.add.rectangle(IX + PW / 2, IY + PH / 2, PW, PH, 0x0d1117, 0.88)
       .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(4);
 
-    // Title
+    // Title + Sort button
     this.add.text(IX + PW / 2, IY + 4, '─ BAG ─', {
       fontFamily: 'Courier New', fontSize: '11px', color: '#445566',
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(4);
+    const sortLbl = this.add.text(IX + PW - 4, IY + 4, '[sort]', {
+      fontFamily: 'Courier New', fontSize: '10px', color: '#334455',
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(5).setInteractive({ useHandCursor: true });
+    sortLbl.on('pointerover', () => sortLbl.setColor('#88aacc'));
+    sortLbl.on('pointerout',  () => sortLbl.setColor('#334455'));
+    sortLbl.on('pointerdown', () => this._sortInventory());
 
     // Build slot grid
     this._invSlots = [];
@@ -333,13 +385,61 @@ export class UIScene extends Phaser.Scene {
         fontFamily: 'Courier New', fontSize: '9px', color: '#aaaacc',
       }).setOrigin(1, 0).setScrollFactor(0).setDepth(5);
 
-      const slot = { bg, icon, qty, index: i, _selectedOnce: false };
+      const slot = { bg, icon, qty, index: i };
       this._invSlots.push(slot);
 
       bg.on('pointerover', () => { if (slot._item) bg.setFillStyle(0x223344); });
       bg.on('pointerout',  () => bg.setFillStyle(slot._item ? 0x1e2a3a : 0x111118));
-      bg.on('pointerdown', () => this._onInvSlotClick(slot));
+      bg.on('pointerdown', (pointer) => {
+        if (pointer.rightButtonDown()) { this._invDirectUse(slot); return; }
+        this._onInvSlotClick(slot);
+        this._startDragFrom(slot, 'inv', pointer);
+      });
     }
+
+    // ── Item description tooltip (appears to the left of the bag) ─
+    const TW = 188;
+    const TX = Math.max(4, IX - TW - 6);
+    const TY = IY;
+    const ttBg = this.add.rectangle(TX + TW / 2, TY + PH / 2, TW, PH, 0x080c11, 0.95)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(6).setVisible(false)
+      .setInteractive(); // blocks game clicks only when tooltip is visible
+    const ttTitle = this.add.text(TX + TW / 2, TY + 6, '─ ITEM INFO ─', {
+      fontFamily: 'Courier New', fontSize: '11px', color: '#445566',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(7).setVisible(false);
+    const ttIcon = this.add.image(TX + TW / 2, TY + 52, 'item-weapon')
+      .setDisplaySize(36, 36).setScrollFactor(0).setDepth(7).setVisible(false);
+    const ttName = this.add.text(TX + 8, TY + 78, '', {
+      fontFamily: 'Courier New', fontSize: '12px', color: '#ffd700',
+      wordWrap: { width: TW - 16 },
+    }).setScrollFactor(0).setDepth(7).setVisible(false);
+    const ttType = this.add.text(TX + 8, TY + 96, '', {
+      fontFamily: 'Courier New', fontSize: '10px', color: '#556677',
+    }).setScrollFactor(0).setDepth(7).setVisible(false);
+    const ttStats = this.add.text(TX + 8, TY + 114, '', {
+      fontFamily: 'Courier New', fontSize: '11px', color: '#88aacc',
+      lineSpacing: 4,
+    }).setScrollFactor(0).setDepth(7).setVisible(false);
+    const ttDesc = this.add.text(TX + 8, TY + 168, '', {
+      fontFamily: 'Courier New', fontSize: '11px', color: '#aabbcc',
+      wordWrap: { width: TW - 16 }, lineSpacing: 3,
+    }).setScrollFactor(0).setDepth(7).setVisible(false);
+    const ttValue = this.add.text(TX + 8, TY + PH - 68, '', {
+      fontFamily: 'Courier New', fontSize: '10px', color: '#ccaa44',
+    }).setScrollFactor(0).setDepth(7).setVisible(false);
+    // Action button (USE / EQUIP / UNEQUIP)
+    const ttActionBtn = this.add.rectangle(TX + TW / 2, TY + PH - 28, TW - 20, 22, 0x1a3322, 1)
+      .setStrokeStyle(1, 0x00cc44).setScrollFactor(0).setDepth(7).setVisible(false)
+      .setInteractive({ useHandCursor: true });
+    const ttActionLbl = this.add.text(TX + TW / 2, TY + PH - 28, 'USE', {
+      fontFamily: 'Courier New', fontSize: '11px', color: '#00ff88',
+    }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(8).setVisible(false);
+    ttActionBtn.on('pointerover', () => ttActionBtn.setFillStyle(0x2a4432));
+    ttActionBtn.on('pointerout',  () => ttActionBtn.setFillStyle(0x1a3322));
+    ttActionBtn.on('pointerdown', () => this._doTooltipAction());
+    this._invTooltip = { bg: ttBg, title: ttTitle, icon: ttIcon, name: ttName,
+      type: ttType, stats: ttStats, desc: ttDesc, value: ttValue,
+      actionBtn: ttActionBtn, actionLbl: ttActionLbl };
   }
 
   _refreshInventory() {
@@ -351,57 +451,316 @@ export class UIScene extends Phaser.Scene {
     for (const slot of this._invSlots) {
       const item = inv[slot.index];
       slot._item = item;
-      slot._selectedOnce = false;
+
+      // Auto-clear selection if the selected item disappeared
+      if (slot === this._selSlot && !item) {
+        this._selSlot = null;
+        this._selSrc  = null;
+        this._hideInvTooltip();
+      }
 
       if (item) {
-        slot.bg.setFillStyle(0x1e2a3a).setStrokeStyle(1, 0x334466);
+        if (slot === this._selSlot) {
+          slot.bg.setFillStyle(0x0d2210).setStrokeStyle(2, 0x00cc44);
+        } else {
+          slot.bg.setFillStyle(0x1e2a3a).setStrokeStyle(1, 0x334466);
+        }
         slot.icon.setTexture(`item-${item.id ?? item.type}`).setVisible(true);
         slot.qty.setText(item.qty > 1 ? String(item.qty) : '');
       } else {
         slot.bg.setFillStyle(0x111118).setStrokeStyle(1, 0x223344);
         slot.icon.setVisible(false);
         slot.qty.setText('');
-      }    }
+      }
+    }
   }
 
   _onInvSlotClick(slot) {
     const gs = this.scene.get(SCENE.GAME);
     if (!gs?.player) return;
-    if (gs.gamePaused || gs.activePanel !== 0) return; // PANEL.NONE = 0
+    if (gs.gamePaused || gs.activePanel !== 0) return;
+
+    // Re-click same slot → deselect
+    if (this._selSlot === slot) { this._clearSelection(); return; }
+
+    // Click any slot → just select it (moves/equips happen via drag)
+    if (!slot._item) { this._clearSelection(); return; }
+    this._setSelection(slot, 'inv');
+    this._showInvTooltip(slot._item);
+  }
+
+  _showInvTooltip(item) {
+    const tt = this._invTooltip;
+    if (!tt) return;
+    const typeLabel = { weapon:'Weapon', armor:'Armor', ring:'Ring', amulet:'Amulet',
+      potion:'Potion', scroll:'Scroll', material:'Material', gold:'Gold' };
+    tt.icon.setTexture(`item-${item.id ?? item.type}`).setVisible(true);
+    tt.name.setText(item.name).setVisible(true);
+    tt.type.setText(typeLabel[item.type] ?? item.type ?? '').setVisible(true);
+    const parts = [];
+    if (item.atk)           parts.push(`ATK  +${item.atk}`);
+    if (item.def)           parts.push(`DEF  +${item.def}`);
+    if (item.hpBonus)       parts.push(`HP   +${item.hpBonus}`);
+    if (item.manaBonus)     parts.push(`MP   +${item.manaBonus}`);
+    if (item.effect?.heal)  parts.push(`Heals ${item.effect.heal} HP`);
+    if (item.effect?.mana)  parts.push(`Restores ${item.effect.mana} MP`);
+    if (item.effect?.atk)   parts.push(`ATK +${item.effect.atk} (temp)`);
+    if (item.effect?.speed) parts.push(`SPD +${item.effect.speed} (temp)`);
+    tt.stats.setText(parts.join('\n')).setVisible(parts.length > 0);
+    tt.desc.setText(item.description ?? '').setVisible(!!item.description);
+    tt.value.setText(item.value ? `Value: ${item.value}g` : '').setVisible(!!item.value);
+    // Action button label depends on selection source
+    const isEquipSrc = this._selSrc === 'equip';
+    const noAction   = item.type === 'material'; // materials have no direct use action
+    const lbl = isEquipSrc ? 'UNEQUIP' : (item.slot ? 'EQUIP' : (noAction ? '' : 'USE'));
+    if (lbl) {
+      tt.actionLbl.setText(lbl).setVisible(true);
+      tt.actionBtn.setVisible(true);
+    } else {
+      tt.actionLbl.setVisible(false);
+      tt.actionBtn.setVisible(false);
+    }
+    tt.title.setVisible(true);
+    tt.bg.setVisible(true);
+  }
+
+  _hideInvTooltip() {
+    const tt = this._invTooltip;
+    if (!tt) return;
+    tt.bg.setVisible(false);
+    tt.title.setVisible(false);
+    tt.icon.setVisible(false);
+    tt.name.setVisible(false);
+    tt.type.setVisible(false);
+    tt.stats.setVisible(false);
+    tt.desc.setVisible(false);
+    tt.value.setVisible(false);
+    tt.actionBtn?.setVisible(false);
+    tt.actionLbl?.setVisible(false);
+  }
+
+  // ── Unified selection helpers ────────────────────────────
+
+  /** Mark a slot as selected (green highlight, single selection across inv+equip). */
+  _setSelection(slot, source) {
+    // Clear previous visual
+    if (this._selSlot && this._selSlot !== slot) {
+      const s = this._selSlot;
+      s.bg.setFillStyle(s._item ? 0x1e2a3a : 0x111118)
+         .setStrokeStyle(1, s._item ? 0x334466 : 0x223344);
+    }
+    this._selSlot = slot;
+    this._selSrc  = source;
+    slot.bg.setFillStyle(0x0d2210).setStrokeStyle(2, 0x00cc44);
+  }
+
+  /** Deselect and hide tooltip. */
+  _clearSelection() {
+    if (this._selSlot) {
+      const s = this._selSlot;
+      s.bg.setFillStyle(s._item ? 0x1e2a3a : 0x111118)
+         .setStrokeStyle(1, s._item ? 0x334466 : 0x223344);
+      this._selSlot = null;
+      this._selSrc  = null;
+    }
+    this._hideInvTooltip();
+  }
+
+  /** Right-click an inventory slot: directly use/equip without selecting first. */
+  _invDirectUse(slot) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player) return;
+    if (gs.gamePaused || gs.activePanel !== 0) return;
     const item = slot._item;
     if (!item) return;
+    if (item.type === 'potion')    SFX.play('potion');
+    else if (item.type === 'gold') SFX.play('coin');
+    else SFX.play('equip');
+    const result = gs.player.useItem(slot.index);
+    if (result?.scrollEffect) gs._applyScrollEffect(result.scrollEffect);
+    if (result) gs._endPlayerTurn?.();
+    if (this._selSlot === slot) this._clearSelection();
+    else this._refreshInventory();
+  }
 
-    if (!slot._selectedOnce) {
-      // First click: show info + green selection border
-      slot._selectedOnce = true;
-      slot.bg.setFillStyle(0x0d2210).setStrokeStyle(2, 0x00cc44);
-      // Reset all other slots
-      for (const s of this._invSlots) {
-        if (s !== slot && s._selectedOnce) {
-          s._selectedOnce = false;
-          s.bg.setFillStyle(s._item ? 0x1e2a3a : 0x111118)
-             .setStrokeStyle(1, s._item ? 0x334466 : 0x223344);
-        }
-      }
-      let info = `${item.name}`;
-      if (item.atk)      info += ` | ATK+${item.atk}`;
-      if (item.def)      info += ` | DEF+${item.def}`;
-      if (item.hpBonus)  info += ` | HP+${item.hpBonus}`;
-      if (item.effect?.heal) info += ` | Heal ${item.effect.heal}`;
-      info += ' — click again to use';
-      this.bus.emit(EV.LOG_MSG, { text: info, color: '#88aacc' });
-    } else {
-      // Second click: use / equip
-      slot._selectedOnce = false;
-      slot.bg.setFillStyle(0x1e2a3a).setStrokeStyle(1, 0x334466);
-      if (item.type === 'potion')   SFX.play('potion');
+  /** Right-click an equip slot: directly unequip without selecting first. */
+  _equipDirectUnequip(slot) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player) return;
+    if (gs.gamePaused || gs.activePanel !== 0) return;
+    const item = slot._item;
+    if (!item || item.id === 'fists' || item.id === 'rags') return;
+    SFX.play('equip');
+    gs.player.unequipItem(slot.slotKey);
+    gs._endPlayerTurn?.();
+    if (this._selSlot === slot) this._clearSelection();
+    else { this._refreshEquipPanel(); this._refreshInventory(); }
+  }
+
+  /** Called by the tooltip action button: use/equip/unequip the selected item. */
+  _doTooltipAction() {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player || !this._selSlot) return;
+    if (gs.gamePaused || gs.activePanel !== 0) return;
+    const slot = this._selSlot;
+    const src  = this._selSrc;
+    const item = slot._item;
+    if (!item) { this._clearSelection(); return; }
+
+    if (src === 'inv') {
+      if (item.type === 'potion')    SFX.play('potion');
       else if (item.type === 'gold') SFX.play('coin');
       else SFX.play('equip');
       const result = gs.player.useItem(slot.index);
       if (result?.scrollEffect) gs._applyScrollEffect(result.scrollEffect);
       if (result) gs._endPlayerTurn?.();
+      this._clearSelection();
+      this._refreshInventory();
+    } else if (src === 'equip') {
+      SFX.play('equip');
+      gs.player.unequipItem(slot.slotKey);
+      gs._endPlayerTurn?.();
+      this._clearSelection();
+      this._refreshEquipPanel();
       this._refreshInventory();
     }
+  }
+
+  /** Sort inventory by type then name. */
+  _sortInventory() {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player) return;
+    const typeOrder = { weapon:0, armor:1, ring:2, amulet:3, potion:4, scroll:5, material:6, gold:7 };
+    const inv  = gs.player.inventory;
+    const items = inv.filter(Boolean).sort((a, b) => {
+      const ta = typeOrder[a.type] ?? 99, tb = typeOrder[b.type] ?? 99;
+      return ta !== tb ? ta - tb : (a.name ?? '').localeCompare(b.name ?? '');
+    });
+    for (let i = 0; i < inv.length; i++) inv[i] = items[i] ?? null;
+    this._clearSelection();
+    this._refreshInventory();
+  }
+
+  // ── Equipment Panel ──────────────────────────────────────
+
+  _buildEquipPanel(W, panelX, statsBottom) {
+    const PW    = 210;
+    const SZ    = 44;
+    const GAP   = 2;
+    const COLS  = 4;
+    const INNER = COLS * SZ + (COLS - 1) * GAP; // 182
+    const PADX  = Math.floor((PW - INNER) / 2);  // 14
+    const PH    = 16 + 6 + SZ + 8;               // 74
+    const IX    = panelX;
+    const IY    = statsBottom + 6;
+
+    // Background
+    this.add.rectangle(IX + PW / 2, IY + PH / 2, PW, PH, 0x0d1117, 0.88)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(4);
+
+    // Title
+    this.add.text(IX + PW / 2, IY + 4, '─ EQUIPMENT ─', {
+      fontFamily: 'Courier New', fontSize: '11px', color: '#445566',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(4);
+
+    const SLOT_DEFS = [
+      { key: 'weapon', label: 'WPN', shadowType: 'weapon' },
+      { key: 'armor',  label: 'ARM', shadowType: 'armor'  },
+      { key: 'ring',   label: 'RNG', shadowType: 'ring'   },
+      { key: 'amulet', label: 'AMU', shadowType: 'amulet' },
+    ];
+
+    this._equipSlots = [];
+    for (let i = 0; i < 4; i++) {
+      const def = SLOT_DEFS[i];
+      const sx  = IX + PADX + i * (SZ + GAP);
+      const sy  = IY + 22;
+
+      const bg = this.add.rectangle(sx + SZ / 2, sy + SZ / 2, SZ, SZ, 0x111118, 1)
+        .setStrokeStyle(1, 0x223344).setScrollFactor(0).setDepth(4)
+        .setInteractive({ useHandCursor: true });
+
+      // Shadow icon — shown when slot is empty
+      const shadow = this.add.image(sx + SZ / 2, sy + SZ / 2 - 4, `item-${def.shadowType}`)
+        .setDisplaySize(26, 26).setScrollFactor(0).setDepth(5)
+        .setAlpha(0.18).setTint(0x445566);
+
+      // Real item icon — shown when equipped
+      const icon = this.add.image(sx + SZ / 2, sy + SZ / 2 - 4, `item-${def.shadowType}`)
+        .setDisplaySize(26, 26).setScrollFactor(0).setDepth(5).setVisible(false);
+
+      // Small label below the slot
+      const lbl = this.add.text(sx + SZ / 2, sy + SZ - 1, def.label, {
+        fontFamily: 'Courier New', fontSize: '8px', color: '#334455',
+      }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(5);
+
+      const slot = { bg, shadow, icon, lbl, slotKey: def.key, _item: null };
+      this._equipSlots.push(slot);
+
+      bg.on('pointerover', () => { if (slot._item) bg.setFillStyle(0x223344); });
+      bg.on('pointerout',  () => bg.setFillStyle(slot._item ? 0x1e2a3a : 0x111118));
+      bg.on('pointerdown', (pointer) => {
+        if (pointer.rightButtonDown()) { this._equipDirectUnequip(slot); return; }
+        this._onEquipSlotClick(slot);
+        this._startDragFrom(slot, 'equip', pointer);
+      });
+    }
+
+    return IY + PH; // return bottom y for next panel
+  }
+
+  _refreshEquipPanel() {
+    if (!this._equipSlots) return;
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player) return;
+    const eq = gs.player.equipment;
+
+    for (const slot of this._equipSlots) {
+      const raw  = eq[slot.slotKey];
+      // Treat placeholder fists/rags as "nothing equipped"
+      const item = (raw && raw.id !== 'fists' && raw.id !== 'rags') ? raw : null;
+      slot._item = item;
+
+      // Auto-clear selection if the selected item disappeared
+      if (slot === this._selSlot && !item) {
+        this._selSlot = null;
+        this._selSrc  = null;
+        this._hideInvTooltip();
+      }
+
+      if (item) {
+        if (slot === this._selSlot) {
+          slot.bg.setFillStyle(0x0d2210).setStrokeStyle(2, 0x00cc44);
+        } else {
+          slot.bg.setFillStyle(0x1e2a3a).setStrokeStyle(1, 0x334466);
+        }
+        slot.icon.setTexture(`item-${item.id ?? item.type}`).setVisible(true);
+        slot.shadow.setVisible(false);
+      } else {
+        slot.bg.setFillStyle(0x111118).setStrokeStyle(1, 0x223344);
+        slot.icon.setVisible(false);
+        slot.shadow.setVisible(true);
+      }
+    }
+  }
+
+  _onEquipSlotClick(slot) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player) return;
+    if (gs.gamePaused || gs.activePanel !== 0) return;
+
+    // Re-click same slot → deselect
+    if (this._selSlot === slot) { this._clearSelection(); return; }
+
+    // Click any equip slot → just select it (moves happen via drag)
+    if (!slot._item) {
+      const names = { weapon: 'Weapon', armor: 'Armor', ring: 'Ring', amulet: 'Amulet' };
+      this.bus.emit(EV.LOG_MSG, { text: `No ${names[slot.slotKey] ?? slot.slotKey} equipped.`, color: '#556677' });
+      this._clearSelection();
+      return;
+    }
+    this._setSelection(slot, 'equip');
+    this._showInvTooltip(slot._item);
   }
 
   // ── Minimap ─────────────────────────────────────────────
@@ -535,11 +894,6 @@ export class UIScene extends Phaser.Scene {
     this.spdText?.setText(`SPD:  ${p.stats.spd}`);
     this.goldText?.setText(`Gold: ${p.gold}`);
 
-    // Equipment
-    this.equipWpn?.setText(`WPN: ${p.equipment.weapon?.name ?? 'None'}`);
-    this.equipArm?.setText(`ARM: ${p.equipment.armor?.name  ?? 'None'}`);
-    this.equipRng?.setText(`RNG: ${p.equipment.ring?.name   ?? 'None'}`);
-    this.equipAmu?.setText(`AMU: ${p.equipment.amulet?.name ?? 'None'}`);
   }
 
   _refreshFloor(floor) {
@@ -558,6 +912,180 @@ export class UIScene extends Phaser.Scene {
       } else {
         this.logLines[i].setText('');
       }
+    }
+  }
+
+  // ── Drag & Drop ─────────────────────────────────────────
+
+  _initDragSystem() {
+    this._dragSlot   = null;
+    this._dragSrc    = null;
+    this._dragGhost  = null;
+    this._dragging   = false;
+    this._dragStartX = 0;
+    this._dragStartY = 0;
+
+    this.input.on('pointermove', (p) => this._onDragMove(p));
+    this.input.on('pointerup',   (p) => this._onDragEnd(p));
+  }
+
+  _startDragFrom(slot, src, pointer) {
+    this._dragSlot   = slot;
+    this._dragSrc    = src;
+    this._dragging   = false;
+    this._dragStartX = pointer.x;
+    this._dragStartY = pointer.y;
+  }
+
+  _onDragMove(pointer) {
+    if (!this._dragSlot || pointer.rightButtonDown()) return;
+    const dx = pointer.x - this._dragStartX;
+    const dy = pointer.y - this._dragStartY;
+    if (!this._dragging && Math.sqrt(dx * dx + dy * dy) > 8) {
+      this._dragging = true;
+      const item = this._dragSlot._item;
+      if (item) {
+        const key = `item-${item.id ?? item.type}`;
+        this._dragGhost = this.add.image(pointer.x, pointer.y, key)
+          .setDisplaySize(30, 30).setScrollFactor(0).setDepth(200).setAlpha(0.8);
+      }
+    }
+    if (this._dragGhost) this._dragGhost.setPosition(pointer.x, pointer.y);
+  }
+
+  _onDragEnd(pointer) {
+    if (!this._dragSlot) return;
+    const wasDragging = this._dragging;
+    const srcSlot = this._dragSlot;
+    const srcSrc  = this._dragSrc;
+    this._cancelDrag();
+    if (!wasDragging) return; // click was handled by _onInvSlotClick / _onEquipSlotClick
+
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player || gs.gamePaused || gs.activePanel !== 0) return;
+
+    // Determine drop target — inv slot?
+    const invTarget = this._invSlots?.find(
+      s => s !== srcSlot && this._pointerOverSlot(pointer, s)
+    );
+    if (invTarget) { this._dragDropOnInvSlot(srcSlot, srcSrc, invTarget, gs); return; }
+
+    // Equip slot?
+    const eqTarget = this._equipSlots?.find(
+      s => s !== srcSlot && this._pointerOverSlot(pointer, s)
+    );
+    if (eqTarget) { this._dragDropOnEquipSlot(srcSlot, srcSrc, eqTarget, gs); return; }
+
+    // Game world area?
+    const W = this.cameras.main.width;
+    const H = this.cameras.main.height;
+    const inRightPanel = pointer.x > W - 222;
+    const inBottomBar  = pointer.y > H - 150;
+    const inMinimap    = pointer.x < MM_X + MM_W + 16 && pointer.y < MM_Y + MM_H + 34;
+    if (!inRightPanel && !inBottomBar && !inMinimap) {
+      this._dragDropOnWorld(srcSlot, srcSrc, gs);
+    }
+  }
+
+  _pointerOverSlot(pointer, slot) {
+    const b = slot.bg.getBounds();
+    return pointer.x >= b.left && pointer.x <= b.right
+        && pointer.y >= b.top  && pointer.y <= b.bottom;
+  }
+
+  _cancelDrag() {
+    if (this._dragGhost) { this._dragGhost.destroy(); this._dragGhost = null; }
+    this._dragSlot  = null;
+    this._dragSrc   = null;
+    this._dragging  = false;
+  }
+
+  _dragDropOnInvSlot(srcSlot, srcSrc, targetSlot, gs) {
+    if (srcSrc === 'inv') {
+      // Swap two inventory positions
+      const inv = gs.player.inventory;
+      const tmp = inv[targetSlot.index];
+      inv[targetSlot.index] = inv[srcSlot.index];
+      inv[srcSlot.index]    = tmp;
+      if (this._selSlot === srcSlot) this._clearSelection();
+      this._refreshInventory();
+    } else if (srcSrc === 'equip') {
+      // Unequip to specific inv slot
+      const eq  = gs.player.equipment;
+      const eqItem = eq[srcSlot.slotKey];
+      if (eqItem && eqItem.id !== 'fists' && eqItem.id !== 'rags') {
+        const inv    = gs.player.inventory;
+        const target = inv[targetSlot.index];
+        if (!target) {
+          inv[targetSlot.index] = eqItem;
+          eq[srcSlot.slotKey]   = null;
+          gs.player.refreshStats();
+          gs._endPlayerTurn?.();
+        } else if (target.slot === srcSlot.slotKey) {
+          eq[srcSlot.slotKey]   = target;
+          inv[targetSlot.index] = eqItem;
+          gs.player.refreshStats();
+          gs._endPlayerTurn?.();
+        } else {
+          this.bus.emit(EV.LOG_MSG, { text: 'Cannot swap — item type mismatch.', color: '#ff8888' });
+        }
+      }
+      if (this._selSlot === srcSlot) this._clearSelection();
+      this._refreshEquipPanel();
+      this._refreshInventory();
+    }
+  }
+
+  _dragDropOnEquipSlot(srcSlot, srcSrc, targetSlot, gs) {
+    if (srcSrc === 'inv') {
+      const invItem = srcSlot._item;
+      if (invItem && invItem.slot === targetSlot.slotKey) {
+        gs.player.equipItem(srcSlot.index);
+        gs._endPlayerTurn?.();
+        SFX.play('equip');
+        if (this._selSlot === srcSlot) this._clearSelection();
+        this._refreshEquipPanel();
+        this._refreshInventory();
+      } else {
+        this.bus.emit(EV.LOG_MSG, { text: 'Item cannot be equipped in that slot.', color: '#ff8888' });
+      }
+    } else if (srcSrc === 'equip') {
+      // equip → equip: not meaningful, ignore
+      this.bus.emit(EV.LOG_MSG, { text: 'Cannot move between equipment slots directly.', color: '#ff8888' });
+    }
+  }
+
+  _dragDropOnWorld(srcSlot, srcSrc, gs) {
+    const px = gs.player.x;
+    const py = gs.player.y;
+    if (srcSrc === 'inv') {
+      const inv  = gs.player.inventory;
+      const item = inv[srcSlot.index];
+      if (!item) return;
+      inv[srcSlot.index] = null;
+      gs.floorItems.push({ x: px, y: py, item });
+      gs._rebuildItemSprites();
+      gs._render();
+      gs._endPlayerTurn?.();
+      SFX.play('equip');
+      this.bus.emit(EV.LOG_MSG, { text: `Dropped ${item.name}.`, color: '#aabbcc' });
+      if (this._selSlot === srcSlot) this._clearSelection();
+      this._refreshInventory();
+    } else if (srcSrc === 'equip') {
+      const eq   = gs.player.equipment;
+      const item = eq[srcSlot.slotKey];
+      if (!item || item.id === 'fists' || item.id === 'rags') return;
+      eq[srcSlot.slotKey] = null;
+      gs.player.refreshStats();
+      gs.floorItems.push({ x: px, y: py, item });
+      gs._rebuildItemSprites();
+      gs._render();
+      gs._endPlayerTurn?.();
+      SFX.play('equip');
+      this.bus.emit(EV.LOG_MSG, { text: `Dropped ${item.name}.`, color: '#aabbcc' });
+      if (this._selSlot === srcSlot) this._clearSelection();
+      this._refreshEquipPanel();
+      this._refreshInventory();
     }
   }
 
@@ -595,6 +1123,8 @@ export class UIScene extends Phaser.Scene {
       btn.on('pointerdown', cb);
       return btn;
     };
+
+    Music.suspend();
 
     mkBtn('[ CONTINUE ]',    H / 2 - 50, '#44ff88', () => this.bus.emit(EV.RESUME_GAME));
     mkBtn('[ SAVE GAME ]',   H / 2 + 10, '#ffd700', () => {
@@ -649,6 +1179,7 @@ export class UIScene extends Phaser.Scene {
       this.input.keyboard.off('keydown-ESC', this._pauseEscHandler);
       this._pauseEscHandler = null;
     }
+    Music.resume();
   }
 
   _showInstructions() {

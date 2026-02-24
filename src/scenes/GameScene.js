@@ -1215,6 +1215,9 @@ export class GameScene extends Phaser.Scene {
   _onPointerDown(ptr) {
     if (ptr.rightButtonDown()) return;
     if (this._panelJustClosed) return;  // panel button click should not propagate to walk
+    // Block if pointer is over any UIScene interactive element (slots, buttons, zones)
+    const ui = this.scene.get(SCENE.UI);
+    if (ui?.input.hitTestPointer(ptr).length > 0) return;
     if (!this.targeting) {
       // Click-to-walk: ignore clicks over UI panels
       if (this.activePanel !== PANEL.NONE) return;

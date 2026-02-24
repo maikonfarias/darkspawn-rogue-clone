@@ -66,18 +66,26 @@ class ProceduralMusicEngine {
     this._playing  = false;
     this._volume   = 0.52;
     this._theme    = null;
+    this._themeKey = null;
   }
 
   get isPlaying() { return this._playing; }
 
-  /** Suspend the AudioContext (e.g. tab hidden). */
+  /** Suspend audio: clear scheduled timers so notes don't pile up while tab is hidden. */
   suspend() {
+    this._timers.forEach(id => clearTimeout(id));
+    this._timers = [];
     if (this._ctx && this._ctx.state === 'running') this._ctx.suspend().catch(() => {});
   }
 
-  /** Resume the AudioContext (e.g. tab visible again). */
+  /** Resume audio: fully restart music so accumulated state doesn't cause loudness spikes. */
   resume() {
-    if (this._ctx && this._ctx.state === 'suspended') this._ctx.resume().catch(() => {});
+    if (!this._themeKey) return;
+    const key = this._themeKey;
+    this.stop(0);            // immediately tear down suspended context
+    setTimeout(() => {
+      if (!this._playing) this.play(key);
+    }, 350);
   }
 
   // ── Public API ──────────────────────────────────────────
@@ -115,8 +123,9 @@ class ProceduralMusicEngine {
 
     this._buildReverb();
 
-    this._theme   = THEMES[themeKey] ?? THEMES.menu;
-    this._playing = true;
+    this._theme    = THEMES[themeKey] ?? THEMES.menu;
+    this._themeKey = themeKey;
+    this._playing  = true;
 
     this._startDrones();
     this._startChordPads();

@@ -111,7 +111,7 @@ export function applyStatus(entity, type, duration, extra = {}) {
  * Tick all status effects on entity (call once per turn).
  * Returns log messages.
  */
-export function tickStatusEffects(entity) {
+export function tickStatusEffects(entity, events = null) {
   if (!entity.statusEffects || entity.statusEffects.length === 0) return [];
   const msgs = [];
 
@@ -122,16 +122,19 @@ export function tickStatusEffects(entity) {
       const dmg = rand(1, 3);
       entity.stats.hp -= dmg;
       msgs.push({ text: `${entity.name} takes ${dmg} poison damage.`, color: '#44cc44' });
+      events?.emit('float-dmg', { x: entity.x, y: entity.y, dmg, color: '#44cc44' });
     }
     if (eff.type === 'burn') {
       const dmg = rand(2, 5);
       entity.stats.hp -= dmg;
       msgs.push({ text: `${entity.name} burns for ${dmg} damage.`, color: '#ff8800' });
+      events?.emit('float-dmg', { x: entity.x, y: entity.y, dmg, color: '#ff8800' });
     }
     if (eff.type === 'bleed') {
       const dmg = rand(1, 2);
       entity.stats.hp -= dmg;
       msgs.push({ text: `${entity.name} bleeds for ${dmg}.`, color: '#dd3333' });
+      events?.emit('float-dmg', { x: entity.x, y: entity.y, dmg, color: '#dd3333' });
     }
 
     return eff.duration > 0;
