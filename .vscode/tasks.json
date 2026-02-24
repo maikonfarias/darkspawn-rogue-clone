@@ -2,10 +2,26 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npx vite build",
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dev Server",
+			"type": "shell",
+			"command": "npx vite --port 5173",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
 			"label": "Preview Build",
 			"type": "shell",
 			"command": "npx vite preview --port 4173",
-			"isBackground": true
+			"isBackground": true,
+			"dependsOn": "Build",
+			"problemMatcher": []
 		}
 	]
 }

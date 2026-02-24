@@ -261,8 +261,9 @@ export class UIScene extends Phaser.Scene {
     if (unlocked.length === 0) return;
 
     const SZ = this._hotbarSZ, GAP = this._hotbarGAP;
-    const totalW = unlocked.length * (SZ + GAP) - GAP;
-    const startX = (this._hotbarW - totalW) / 2;
+    const totalW     = unlocked.length * (SZ + GAP) - GAP;
+    const centerX    = this._hotbarCenterX ?? (this._hotbarColStartX ?? 0) + (this._hotbarW - (this._hotbarColStartX ?? 0)) / 2;
+    const startX     = centerX - totalW / 2;
     const HB_Y   = this._hotbarY;
 
     unlocked.forEach((skillId, i) => {
@@ -1359,7 +1360,8 @@ export class UIScene extends Phaser.Scene {
     const DPAD_Y = LOG_Y + LOG_H;
 
     // ── Top Stats Panel ───────────────────────────────────────
-    const PX = 4, PY = 4, PW = W - 8, PH = STATS_H - 6;
+    // Reserve ~66px on the right for pause/map buttons
+    const PX = 4, PY = 4, PW = W - 74, PH = STATS_H - 6;
 
     this.statsBg = this.add.rectangle(PX + PW / 2, PY + PH / 2, PW, PH, 0x0d1117, 0.92)
       .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(10);
@@ -1373,21 +1375,24 @@ export class UIScene extends Phaser.Scene {
     tx(PX + 6, PY + 4, '⚔ DARKSPAWN', '#ffd700', 12);
     this.floorText = tx(W / 2, PY + 4, 'Floor: 1', '#88aacc', 11).setOrigin(0.5, 0);
 
-    // Pause button (top-right, larger and more tappable on mobile)
-    const pauseBtn = this.add.text(W - 4, PY + 4, '❚❚', {
+    // Pause & Map buttons — each fills roughly half of the stats panel height
+    // PH = STATS_H - 6 = 82px.  Each button: font 16px + paddingY 11*2 = 38px. Gap = 2px.
+    const BTN_RIGHT_X  = W - 4;
+    const SIDE_BTN_H   = Math.floor((PH - 2) / 2); // ~40px each
+    const SIDE_PAD_Y   = Math.floor((SIDE_BTN_H - 16) / 2); // vertical padding to fill height
+
+    const pauseBtn = this.add.text(BTN_RIGHT_X, PY + 2, '❚❚', {
       fontFamily: 'Courier New', fontSize: '16px', color: '#88aacc',
-      backgroundColor: '#1a1a2a', padding: { x: 10, y: 6 },
-    }).setOrigin(1, 0).setScrollFactor(0).setDepth(11).setInteractive({ useHandCursor: true });
+      backgroundColor: '#1a1a2a', padding: { x: 10, y: SIDE_PAD_Y },
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(13).setInteractive({ useHandCursor: true });
     pauseBtn.on('pointerover', () => pauseBtn.setColor('#ffd700'));
     pauseBtn.on('pointerout',  () => pauseBtn.setColor('#88aacc'));
     pauseBtn.on('pointerdown', () => this.bus.emit(EV.PAUSE_GAME));
 
-    // Map button (below pause button, top-right)
-    // Y: pauseBtn top (PY+4) + font height (16) + total vertical padding (6*2=12) + gap (4)
-    const mapBtn = this.add.text(W - 4, PY + 4 + 16 + 12 + 4, 'MAP', {
-      fontFamily: 'Courier New', fontSize: '13px', color: '#88aacc',
-      backgroundColor: '#1a1a2a', padding: { x: 10, y: 5 },
-    }).setOrigin(1, 0).setScrollFactor(0).setDepth(11).setInteractive({ useHandCursor: true });
+    const mapBtn = this.add.text(BTN_RIGHT_X, PY + 2 + SIDE_BTN_H + 2, 'MAP', {
+      fontFamily: 'Courier New', fontSize: '16px', color: '#88aacc',
+      backgroundColor: '#1a1a2a', padding: { x: 10, y: SIDE_PAD_Y },
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(13).setInteractive({ useHandCursor: true });
     mapBtn.on('pointerover', () => mapBtn.setColor('#ffd700'));
     mapBtn.on('pointerout',  () => mapBtn.setColor('#88aacc'));
     mapBtn.on('pointerdown', () => this._toggleMinimap());
@@ -1461,22 +1466,27 @@ export class UIScene extends Phaser.Scene {
     this._invTooltip = null;
   }
 
-  _buildSkillHotbar_portrait(W, startY, height) {
+  _buildSkillHotbar_portrait(W, startY, height, colStartX = 0, explicitPanelW = 0, explicitCenterX = 0) {
     const SZ = 34, GAP = 3;
-    const HB_Y = startY + Math.floor((height - SZ) / 2);
+    const HB_Y   = startY + Math.floor((height - SZ) / 2);
     const maxSlots = 8;
-    const panelW = maxSlots * (SZ + GAP) - GAP + 12;
+    const availW  = W - colStartX;
+    const panelW  = explicitPanelW > 0
+      ? explicitPanelW
+      : Math.min(maxSlots * (SZ + GAP) - GAP + 12, availW - 8);
+    const centerX = explicitCenterX > 0 ? explicitCenterX : colStartX + availW / 2;
 
-    this.add.rectangle(W / 2, HB_Y + SZ / 2 + 2, panelW, SZ + 12, 0x0d1117, 0.88)
-      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(10);
-    this.add.text(W / 2, HB_Y - 2, 'SKILLS', {
-      fontFamily: 'Courier New', fontSize: '9px', color: '#334466',
-    }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(10);
+    // depth 3 — must be BELOW slot bgs (depth 4) and icons (depth 5) so they're visible
+    this.add.rectangle(centerX, HB_Y + SZ / 2 + 2, panelW, SZ + 12, 0x0d1117, 0.88)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(3);
+    // No SKILLS label in mobile — saves vertical space
 
-    this._hotbarSZ         = SZ;
-    this._hotbarGAP        = GAP;
-    this._hotbarY          = HB_Y;
-    this._hotbarW          = W;
+    this._hotbarSZ          = SZ;
+    this._hotbarGAP         = GAP;
+    this._hotbarY           = HB_Y;
+    this._hotbarW           = W;
+    this._hotbarColStartX   = colStartX;
+    this._hotbarCenterX     = centerX;  // used by _refreshSkillHotbar for slot centering
     this._hotbarSkills     = [];
     this._hotbarSlotObjects = [];
     this._selectedSkillId  = null;
@@ -1486,19 +1496,19 @@ export class UIScene extends Phaser.Scene {
   }
 
   _buildDPad(W, startY, height) {
-    // ── Skill Hotbar (top 40px of the DPAD zone) ──────────────
-    const HOTBAR_PORTION = 40;
-    this._buildSkillHotbar_portrait(W, startY, HOTBAR_PORTION);
-
-    // ── D-pad + 4 action buttons (remaining 100px below hotbar) ─
-    const dpadStartY = startY + HOTBAR_PORTION;
-    const dpadHeight = height - HOTBAR_PORTION; // 100
+    // Layout (all within the DPAD zone):
+    //  Left column : d-pad grid, centered vertically in the full zone height
+    //  Right column: skill hotbar (top half) + 4 action buttons (bottom half)
+    const ACTION_H = Math.floor(height * 0.40);  // ~40 % of zone for action buttons
+    const HOTBAR_H = Math.floor(height * 0.30);  // ~30 % for skill hotbar
+    // D-pad occupies full height on the left side
+    const dpadHeight = height;
 
     const SZ = 32, GAP = 2;     // d-pad button size and gap
     const gridW = SZ * 3 + GAP * 2;
     const gridH = SZ * 3 + GAP * 2;
     const dpadX = 6;
-    const dpadY = dpadStartY + Math.floor((dpadHeight - gridH) / 2);
+    const dpadY = startY + Math.floor((dpadHeight - gridH) / 2);
 
     // D-pad background
     this.add.rectangle(dpadX + gridW / 2, dpadY + gridH / 2, gridW + 8, gridH + 8, 0x0d1117, 0.88)
@@ -1559,12 +1569,19 @@ export class UIScene extends Phaser.Scene {
       });
     }
 
-    // ── Action buttons (right of d-pad, 4 buttons filling available width) ──
-    const BTN_GAP = 3;
-    const BTN_H   = Math.min(48, dpadHeight - 4); // fit within d-pad height
-    const actionStartX = dpadX + gridW + 10;
-    const BTN_W = Math.floor((W - actionStartX - 4 - 3 * BTN_GAP) / 4);
-    const actionStartY = dpadStartY + Math.floor((dpadHeight - BTN_H) / 2);
+    // ── Compute action button dimensions first so hotbar can match their width ─
+    const rightColX    = dpadX + gridW + 10;   // x where the right column begins
+    const BTN_GAP      = 3;
+    const BTN_H        = ACTION_H - 8;
+    const actionStartX = rightColX;
+    const BTN_W        = Math.floor((W - actionStartX - 4 - 3 * BTN_GAP) / 4);
+    const totalBtnsW   = 4 * BTN_W + 3 * BTN_GAP;  // exact width the 4 buttons span
+    const btnsCenterX  = actionStartX + totalBtnsW / 2;  // shared center for hotbar alignment
+
+    // ── Skill hotbar: same width & center as the 4 buttons ───────────────────
+    const hotbarStartY = startY + height - ACTION_H - HOTBAR_H;
+    this._buildSkillHotbar_portrait(W, hotbarStartY, HOTBAR_H, rightColX, totalBtnsW, btnsCenterX);
+    const actionStartY = startY + height - ACTION_H + Math.floor((ACTION_H - BTN_H) / 2);
 
     // 4 action buttons only (MAP and PAUSE moved to top-right corner)
     const ACTIONS = [
