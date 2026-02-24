@@ -922,6 +922,92 @@ function genSkillIcons(scene) {
     g.fillStyle(0xffffff, 1); g.fillCircle(11, 10, 1);
     g.fillStyle(0xdd99ff, 1); g.fillRect(4, 18, 16, 1);
   });
+
+  // powerStrike — glowing orange sword (warrior passive +atk)
+  genSkill('powerStrike', g => {
+    g.fillStyle(0x331100, 1); g.fillCircle(12, 12, 10);
+    g.fillStyle(0xbbbbbb, 1); g.fillRect(11, 2, 3, 14);
+    g.fillStyle(0xffffff, 1); g.fillRect(11, 2, 1, 12);
+    g.fillStyle(0xaa8800, 1); g.fillRect(7, 14, 11, 3);
+    g.fillStyle(0xffcc00, 1); g.fillRect(7, 14, 11, 1);
+    g.fillStyle(0x663300, 1); g.fillRect(11, 17, 3, 5);
+    g.fillStyle(0xff6600, 1); g.fillRect(12, 2, 1, 4); g.fillRect(10, 4, 1, 2);
+  });
+
+  // shieldWall — blue kite shield (warrior passive +def)
+  genSkill('shieldWall', g => {
+    g.fillStyle(0x001133, 1); g.fillCircle(12, 12, 10);
+    g.fillStyle(0x2244aa, 1); g.fillRect(6, 3, 12, 14);
+    g.fillRect(7, 17, 10, 2); g.fillRect(9, 19, 6, 2); g.fillRect(11, 21, 2, 1);
+    g.fillStyle(0x4466cc, 1); g.fillRect(7, 4, 10, 12);
+    g.fillStyle(0x88aaff, 1); g.fillRect(11, 4, 2, 12); g.fillRect(7, 9, 10, 2);
+    g.fillStyle(0xffffff, 1); g.fillRect(11, 8, 2, 1);
+  });
+
+  // toughness — red heart with HP cross (warrior passive +maxHp)
+  genSkill('toughness', g => {
+    g.fillStyle(0x330000, 1); g.fillCircle(12, 12, 10);
+    g.fillStyle(0xcc0000, 1);
+    g.fillCircle(9, 9, 4); g.fillCircle(15, 9, 4);
+    g.fillRect(5, 9, 14, 6);
+    g.fillRect(6, 15, 12, 2); g.fillRect(8, 17, 8, 2); g.fillRect(10, 19, 4, 2); g.fillRect(11, 21, 2, 1);
+    g.fillStyle(0xff4444, 1); g.fillCircle(8, 8, 2); g.fillCircle(14, 8, 2);
+    g.fillStyle(0xff9999, 1); g.fillRect(8, 7, 2, 1);
+    g.fillStyle(0xffffff, 1); g.fillRect(11, 10, 2, 6); g.fillRect(9, 12, 6, 2);
+  });
+
+  // criticalStrike — dagger over starburst (rogue passive +crit)
+  genSkill('criticalStrike', g => {
+    g.fillStyle(0x221100, 1); g.fillCircle(12, 12, 10);
+    g.fillStyle(0xffcc00, 1);
+    g.fillRect(11, 2, 2, 20); g.fillRect(2, 11, 20, 2);
+    g.fillRect(5, 5, 2, 2); g.fillRect(17, 5, 2, 2); g.fillRect(5, 17, 2, 2); g.fillRect(17, 17, 2, 2);
+    g.fillStyle(0xdddddd, 1); g.fillRect(11, 2, 2, 13);
+    g.fillStyle(0xffffff, 1); g.fillRect(11, 2, 1, 11);
+    g.fillStyle(0xaa8800, 1); g.fillRect(8, 13, 8, 2);
+    g.fillStyle(0x553300, 1); g.fillRect(11, 15, 2, 6);
+    g.fillStyle(0x885500, 1); g.fillRect(10, 20, 4, 2);
+  });
+
+  // evasion — silhouette with motion blur (rogue passive +dodge)
+  genSkill('evasion', g => {
+    g.fillStyle(0x001122, 1); g.fillCircle(12, 12, 10);
+    g.fillStyle(0x224455, 1);
+    g.fillRect(2, 8, 9, 2); g.fillRect(2, 12, 7, 2); g.fillRect(2, 16, 9, 2);
+    g.fillStyle(0x44aacc, 1);
+    g.fillRect(3, 8, 6, 1); g.fillRect(3, 12, 4, 1); g.fillRect(3, 16, 5, 1);
+    g.fillStyle(0x88ddff, 1); g.fillCircle(16, 6, 3);
+    g.fillRect(14, 9, 4, 5);
+    g.fillRect(13, 14, 2, 5); g.fillRect(16, 14, 2, 5);
+    g.fillStyle(0xaaeeff, 1); g.fillCircle(16, 5, 1);
+  });
+
+  // poisonBlade — green dagger with drips (rogue passive +poison)
+  genSkill('poisonBlade', g => {
+    g.fillStyle(0x001100, 1); g.fillCircle(12, 12, 10);
+    g.fillStyle(0x669922, 1); g.fillRect(11, 2, 3, 14);
+    g.fillStyle(0xaaffaa, 1); g.fillRect(11, 2, 1, 12);
+    g.fillStyle(0xccff33, 1); g.fillRect(11, 2, 2, 2);
+    g.fillStyle(0x446622, 1); g.fillRect(7, 14, 11, 3);
+    g.fillStyle(0x223311, 1); g.fillRect(11, 17, 3, 5);
+    g.fillStyle(0x44ff66, 1);
+    g.fillCircle(8, 11, 2); g.fillCircle(16, 9, 2); g.fillCircle(7, 17, 1);
+    g.fillStyle(0x88ff88, 1); g.fillRect(8, 10, 1, 1); g.fillRect(16, 8, 1, 1);
+  });
+
+  // arcaneKnowledge — open tome with rune (mage passive +mana)
+  genSkill('arcaneKnowledge', g => {
+    g.fillStyle(0x110033, 1); g.fillCircle(12, 12, 10);
+    g.fillStyle(0x2233aa, 1); g.fillRect(5, 4, 14, 17);
+    g.fillStyle(0x110055, 1); g.fillRect(5, 4, 2, 17);
+    g.fillStyle(0xddddff, 1); g.fillRect(8, 5, 10, 15);
+    g.fillStyle(0x8866ff, 1);
+    g.fillRect(11, 7, 2, 9); g.fillRect(9, 11, 6, 2);
+    g.fillRect(9, 7, 2, 2); g.fillRect(13, 7, 2, 2);
+    g.fillStyle(0xcc99ff, 1); g.fillRect(11, 7, 1, 1);
+    g.fillStyle(0xffcc44, 1); g.fillRect(18, 10, 2, 4);
+    g.fillStyle(0x553300, 1); g.fillRect(5, 20, 14, 1);
+  });
 }
 
 // ── Particle / effect textures ────────────────────────────────

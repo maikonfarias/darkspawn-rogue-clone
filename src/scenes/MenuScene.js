@@ -77,7 +77,7 @@ export class MenuScene extends Phaser.Scene {
 
     this._makeButton(W / 2, H / 2 + 30 + btnOffset, '  [ NEW GAME ]  ', '#ffd700', '#221100', () => {
       Music.stop(1.5);
-      this.scene.start(SCENE.GAME);
+      this.scene.start(SCENE.GAME, { loadSave: false });
       this.scene.launch(SCENE.UI);
     });
 

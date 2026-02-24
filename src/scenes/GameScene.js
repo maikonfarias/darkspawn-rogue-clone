@@ -222,7 +222,9 @@ export class GameScene extends Phaser.Scene {
       if (spawn.x === this.player.x && spawn.y === this.player.y) continue;
       const entry = weightedPick(table);
       if (!entry) continue;
-      const qty = rand(1, 3);
+      const def = ITEMS[entry.id];
+      // Equipment items should never stack — always qty 1
+      const qty = def?.slot ? 1 : rand(1, 3);
       const item = createItem(entry.id, qty);
       this.floorItems.push({ x: spawn.x, y: spawn.y, item });
     }
@@ -1232,6 +1234,7 @@ export class GameScene extends Phaser.Scene {
       if (this.vis[ty]?.[tx] === VIS.HIDDEN) return;
 
       this._startClickWalk(tx, ty);
+      this.events_bus.emit('world-click');
       return;
     }
 
@@ -1500,9 +1503,22 @@ export class GameScene extends Phaser.Scene {
           .setInteractive();
         panel.add(bg);
 
+        // Skill icon
+        const icon = this.add.image(cx + 16, sy + 12, `skill-${skill.id}`)
+          .setDisplaySize(22, 22);
+        if (!unlocked) icon.setTint(0x444466);
+        panel.add(icon);
+
         const nameClr = unlocked ? '#88ff88' : canUnlockSkill ? '#88aacc' : '#445566';
-        this._addText(panel, cx + 4, sy + 4, skill.name, nameClr, 11);
-        this._addText(panel, cx + 4, sy + 18, skill.description, '#667788', 9, colW - 12);
+        this._addText(panel, cx + 32, sy + 3, skill.name, nameClr, 11);
+
+        // Type tag: Active (cost) or Passive
+        const isActive = !!skill.active;
+        const typeStr = isActive ? `[Active ${skill.active.cost}mp]` : '[Passive]';
+        this._addText(panel, cx + 32, sy + 15, typeStr, isActive ? '#5566aa' : '#446644', 9);
+
+        // Description spanning full card width below the icon row
+        this._addText(panel, cx + 4, sy + 30, skill.description, '#667788', 9, colW - 12);
 
         if (unlocked) {
           this._addText(panel, cx + colW - 6, sy + 50, '✓', '#44ff44', 11).setOrigin(1, 0);
@@ -1512,21 +1528,11 @@ export class GameScene extends Phaser.Scene {
           btn.on('pointerdown', () => {
             if (unlockSkill(this.player, skill.id)) {
               this.events_bus.emit(EV.LOG_MSG, { text: `Unlocked: ${skill.name}!`, color: '#ffd700' });
+              this.events_bus.emit(EV.STATS_CHANGED); // refresh skill hotbar immediately
               this._openPanel(PANEL.SKILLS);
             }
           });
           panel.add(btn);
-        }
-
-        // Active skill use button
-        if (skill.active && unlocked) {
-          const useBtn = this._addText(panel, cx + 4, sy + 48, `[USE ${skill.active.cost}MP]`, '#88aaff', 10)
-            .setInteractive();
-          useBtn.on('pointerdown', () => {
-            this._closePanel();
-            this.useActiveSkill(skill.id);
-          });
-          panel.add(useBtn);
         }
       });
     });

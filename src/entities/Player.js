@@ -43,7 +43,7 @@ export class Player {
     this.level     = 1;
     this.xp        = 0;
     this.gold      = 0;
-    this.skillPoints = 0;
+    this.skillPoints = 1;
 
     // Inventory: array of 24 slots (null = empty)
     this.inventory = new Array(PLAYER_CFG.INV_SLOTS).fill(null);
@@ -129,6 +129,19 @@ export class Player {
     }
     const ok = addToInventory(this, item);
     if (ok) {
+      // Auto-equip if the item has an equipment slot and that slot is empty
+      if (item.slot) {
+        const current = this.equipment[item.slot];
+        const isEmpty = !current || current.id === 'fists' || current.id === 'rags';
+        if (isEmpty) {
+          const invIdx = this.inventory.findIndex(s => s?.id === item.id && s?.slot === item.slot);
+          if (invIdx !== -1) {
+            this.equipItem(invIdx);
+            // equipItem already emits a log + STATS_CHANGED, skip the generic pickup log
+            return ok;
+          }
+        }
+      }
       this.events.emit(EV.LOG_MSG, { text: `Picked up ${item.name}.`, color: '#ccccff' });
       this.events.emit(EV.STATS_CHANGED);
     } else {
@@ -198,10 +211,27 @@ export class Player {
     const item = this.inventory[slotIndex];
     if (!item || !item.slot) return false;
 
+    // Pull exactly one unit from the stack to equip
+    const equipCopy = { ...item, qty: 1 };
+    if ((item.qty ?? 1) > 1) {
+      // Decrement stack, leave remainder in inventory
+      item.qty -= 1;
+    } else {
+      // Last unit — clear the slot (old equipped item goes here if applicable)
+      this.inventory[slotIndex] = null;
+    }
+
     // Swap old equipped item back to inventory (don't return placeholder fists/rags)
     const old = this.equipment[item.slot];
-    this.equipment[item.slot] = item;
-    this.inventory[slotIndex] = (old && old.id !== 'fists' && old.id !== 'rags') ? old : null;
+    this.equipment[item.slot] = equipCopy;
+    if (old && old.id !== 'fists' && old.id !== 'rags') {
+      // Return old equipped item: stack into existing stack or use the freed slot
+      if (this.inventory[slotIndex] === null) {
+        this.inventory[slotIndex] = old;
+      } else {
+        addToInventory(this, old);
+      }
+    }
 
     this.events.emit(EV.LOG_MSG, { text: `Equipped ${item.name}.`, color: '#88ddff' });
     this.refreshStats();

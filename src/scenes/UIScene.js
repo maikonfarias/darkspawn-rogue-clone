@@ -42,6 +42,7 @@ export class UIScene extends Phaser.Scene {
     this.bus.on(EV.STATS_CHANGED,  () => this._refreshInventory());
     this.bus.on(EV.STATS_CHANGED,  () => this._refreshSkillHotbar());
     this.bus.on('skill-selection-done', () => this._clearSkillSelection());
+    this.bus.on('world-click',          () => this._clearSelection());
 
     // Toggle minimap with M key
     this.input.keyboard.on('keydown-M', () => this._toggleMinimap());
@@ -1022,9 +1023,9 @@ export class UIScene extends Phaser.Scene {
           gs.player.refreshStats();
           gs._endPlayerTurn?.();
         } else if (target.slot === srcSlot.slotKey) {
-          eq[srcSlot.slotKey]   = target;
-          inv[targetSlot.index] = eqItem;
-          gs.player.refreshStats();
+          // Use equipItem so only 1 unit is taken from the stack;
+          // it handles routing the previously equipped item back to inventory.
+          gs.player.equipItem(targetSlot.index);
           gs._endPlayerTurn?.();
         } else {
           this.bus.emit(EV.LOG_MSG, { text: 'Cannot swap — item type mismatch.', color: '#ff8888' });
