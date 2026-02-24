@@ -71,9 +71,9 @@ export class UIScene extends Phaser.Scene {
     // Disable browser right-click context menu over the canvas
     this.input.mouse?.disableContextMenu();
 
-    // ── Top-right stats panel ───────────────────────────────
+    // ── Top-left stats panel ────────────────────────────────
     const PW = 210, PH = 240;
-    const PX = W - PW - 6, PY = 6;
+    const PX = 6, PY = 6;
 
     this.statsBg = this.add.rectangle(PX + PW / 2, PY + PH / 2, PW, PH, 0x0d1117, 0.88)
       .setStrokeStyle(1, 0x334466).setScrollFactor(0);
@@ -124,8 +124,8 @@ export class UIScene extends Phaser.Scene {
     // ── Skill Hotbar (above log, bottom-centre) ───────────────
     this._buildSkillHotbar(W, H);
 
-    // ── Minimap (top-left) ────────────────────────────────────
-    this._buildMinimap();
+    // ── Minimap (top-right) ───────────────────────────────────
+    this._buildMinimap(W);
 
     // ── Bottom message log ──────────────────────────────────
     const LOG_H = 80, LOG_Y = H - LOG_H - 4;
@@ -159,10 +159,10 @@ export class UIScene extends Phaser.Scene {
     const uiBlock = (x, y, w, h) =>
       this.add.zone(x + w / 2, y + h / 2, w, h)
         .setScrollFactor(0).setDepth(3).setInteractive();
-    // Right column: stats + equip + inv only (tooltip column blocks itself when visible)
+    // Left column: stats + equip + inv only (tooltip column blocks itself when visible)
     uiBlock(PX - 6, 0, PW + 18, H);
-    // Minimap (top-left)
-    uiBlock(0, 0, MM_X + MM_W + 12, MM_Y + MM_H + 30);
+    // Minimap (top-right)
+    uiBlock(this._mmX - 12, 0, MM_W + 18, MM_Y + MM_H + 30);
     // Bottom hotbar + log
     uiBlock(0, H - 150, W, 150);
   }
@@ -398,9 +398,9 @@ export class UIScene extends Phaser.Scene {
       });
     }
 
-    // ── Item description tooltip (appears to the left of the bag) ─
+    // ── Item description tooltip (appears to the right of the bag) ─
     const TW = 188;
-    const TX = Math.max(4, IX - TW - 6);
+    const TX = IX + PW + 6;
     const TY = IY;
     const ttBg = this.add.rectangle(TX + TW / 2, TY + PH / 2, TW, PH, 0x080c11, 0.95)
       .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(6).setVisible(false)
@@ -766,16 +766,21 @@ export class UIScene extends Phaser.Scene {
 
   // ── Minimap ─────────────────────────────────────────────
 
-  _buildMinimap() {
+  _buildMinimap(W) {
+    const mmX = W - MM_W - 6;
+    const mmY = MM_Y;
+    this._mmX = mmX;
+    this._mmY = mmY;
+
     // Background panel
     this.mmBg = this.add.rectangle(
-      MM_X + MM_W / 2, MM_Y + MM_H / 2,
+      mmX + MM_W / 2, mmY + MM_H / 2,
       MM_W + 4, MM_H + 4,
       0x0d1117, 0.88
     ).setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(10);
 
     // Title label
-    this.mmLabel = this.add.text(MM_X, MM_Y - 12, '[ MINIMAP — M to toggle ]', {
+    this.mmLabel = this.add.text(mmX, mmY - 12, '[ MINIMAP — M to toggle ]', {
       fontFamily: 'Courier New', fontSize: '9px', color: '#334455'
     }).setScrollFactor(0).setDepth(10);
 
@@ -799,8 +804,8 @@ export class UIScene extends Phaser.Scene {
 
     const g   = this.mmGraphics;
     const S   = MM_SCALE;
-    const ox  = MM_X;
-    const oy  = MM_Y;
+    const ox  = this._mmX;
+    const oy  = this._mmY;
 
     g.clear();
 
@@ -980,10 +985,10 @@ export class UIScene extends Phaser.Scene {
     // Game world area?
     const W = this.cameras.main.width;
     const H = this.cameras.main.height;
-    const inRightPanel = pointer.x > W - 222;
+    const inLeftPanel  = pointer.x < 222;
     const inBottomBar  = pointer.y > H - 150;
-    const inMinimap    = pointer.x < MM_X + MM_W + 16 && pointer.y < MM_Y + MM_H + 34;
-    if (!inRightPanel && !inBottomBar && !inMinimap) {
+    const inMinimap    = pointer.x > this._mmX - 10 && pointer.y < MM_Y + MM_H + 34;
+    if (!inLeftPanel && !inBottomBar && !inMinimap) {
       this._dragDropOnWorld(srcSlot, srcSrc, gs);
     }
   }
