@@ -2,9 +2,11 @@
 //  Darkspawn Rogue Quest — UI Scene (HUD overlay)
 //  Runs in parallel with GameScene
 // ============================================================
-import { SCENE, EV, C, VIS, TILE, MAP_W, MAP_H } from '../data/Constants.js';
+import { SCENE, EV, C, VIS, TILE, MAP_W, MAP_H, ITEM_TYPE } from '../data/Constants.js';
 import { XP_TABLE } from '../data/Constants.js';
-import { SKILL_BY_ID } from '../data/SkillData.js';
+import { SKILL_BY_ID, SKILL_TREES } from '../data/SkillData.js';
+import { ITEMS } from '../data/ItemData.js';
+import { getAvailableRecipes } from '../systems/CraftingSystem.js';
 import { saveGame } from '../systems/SaveSystem.js';
 import { Music } from '../systems/ProceduralMusic.js';
 import { SFX } from '../systems/SoundEffects.js';
@@ -43,6 +45,16 @@ export class UIScene extends Phaser.Scene {
     this.bus.on(EV.STATS_CHANGED,  () => this._refreshSkillHotbar());
     this.bus.on('skill-selection-done', () => this._clearSkillSelection());
     this.bus.on('world-click',          () => this._clearSelection());
+
+    // Portrait panel overlay (panels rendered in UIScene for correct 1:1 screen coords)
+    this.bus.on('panel-open',  (type) => this._showPanel(type));
+    this.bus.on('panel-close', ()     => this._hidePanel());
+
+    // Panel state
+    this._panelCtr              = null;
+    this._invTooltipTxt         = null;
+    this._invSelectedSlot       = -1;
+    this._invSelectedEquipSlot  = null;
 
     // Toggle minimap with M key
     this.input.keyboard.on('keydown-M', () => this._toggleMinimap());
@@ -1560,5 +1572,400 @@ export class UIScene extends Phaser.Scene {
       bg.on('pointerdown', () => { bg.setFillStyle(0x334466); act.action(); });
       bg.on('pointerup',   () => bg.setFillStyle(0x111122));
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  Portrait Panel Overlay
+  //  Panels are rendered here (UIScene) in screen-space (zoom=1, scroll=(0,0))
+  //  instead of in GameScene to avoid camera-zoom/scroll coordinate complexity.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  _showPanel(type) {
+    this._hidePanel();
+
+    const W       = this.cameras.main.width;   // 480
+    const H       = this.cameras.main.height;  // 854
+    const HUD_TOP = 88;   // stats bar  – keep in sync with _buildHUD_portrait STATS_H
+    const HUD_BOT = 192;  // bottom HUD – keep in sync with _buildHUD_portrait BOTTOM_H
+    const availH  = H - HUD_TOP - HUD_BOT;    // 574 px
+    const MARG    = 8;
+    const PW      = W - MARG * 2;                         // 464 px
+    const PH      = Math.min(560, availH - MARG * 2);     // ≤ 558 px
+    const bx      = MARG;                                  // 8
+    const by      = HUD_TOP + Math.floor((availH - PH) / 2);
+
+    this._panelCtr = this.add.container(0, 0).setDepth(20);
+
+    // Background
+    this._pAdd(
+      this.add.rectangle(bx + PW / 2, by + PH / 2, PW, PH, 0x0d1117, 0.97)
+        .setStrokeStyle(2, 0x334466).setScrollFactor(0)
+    );
+
+    // Title + close button
+    const TITLES = { 1: '⚔ INVENTORY', 2: '✦ SKILLS', 3: '⚒ CRAFTING', 4: '⚙ CHARACTER' };
+    this._pText(bx + 12, by + 8, TITLES[type] || 'PANEL', '#ffd700', 15);
+    const closeBtn = this._pText(bx + PW - 12, by + 8, '[ESC]', '#556677', 12)
+      .setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerdown', () => {
+      const gs = this.scene.get(SCENE.GAME);
+      if (gs) gs._closePanel();
+    });
+
+    const contentY = by + 32;
+    const contentH = by + PH - contentY;
+
+    switch (type) {
+      case 1: this._renderPortraitInventory(bx, contentY, PW, contentH); break;
+      case 2: this._renderPortraitSkills   (bx, contentY, PW, contentH); break;
+      case 3: this._renderPortraitCrafting (bx, contentY, PW, contentH); break;
+      case 4: this._renderPortraitChar     (bx, contentY, PW, contentH); break;
+    }
+  }
+
+  _hidePanel() {
+    if (this._panelCtr) { this._panelCtr.destroy(true); this._panelCtr = null; }
+    this._invTooltipTxt        = null;
+    this._invSelectedSlot      = -1;
+    this._invSelectedEquipSlot = null;
+  }
+
+  /** Add game object to panel container and return it. */
+  _pAdd(obj) { if (this._panelCtr) this._panelCtr.add(obj); return obj; }
+
+  /** Create and add a text object to the panel container. */
+  _pText(x, y, str, color = '#ccddee', size = 12, wrap = 0) {
+    const cfg = { fontFamily: 'Courier New, monospace', fontSize: `${size}px`, color };
+    if (wrap) cfg.wordWrap = { width: wrap };
+    return this._pAdd(this.add.text(x, y, str, cfg).setScrollFactor(0));
+  }
+
+  // ── Inventory Panel ────────────────────────────────────────────────────────
+
+  _renderPortraitInventory(bx, by, PW, PH) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs) return;
+    this._invSelectedSlot      = -1;
+    this._invSelectedEquipSlot = null;
+
+    let curY = by;
+
+    // ── Equipment row ──────────────────────────────────────────────────────
+    this._pText(bx + 12, curY, '── Equipment ──', '#778899', 11);
+    curY += 16;
+
+    const EQ_SZ  = 50, EQ_GAP = 8;
+    const EQ_LABEL_H = 13;
+    const EQ_SLOTS = [
+      { label: 'WPN', slot: 'weapon' },
+      { label: 'ARM', slot: 'armor'  },
+      { label: 'RNG', slot: 'ring'   },
+      { label: 'AMU', slot: 'amulet' },
+    ];
+    const eqTotalW = EQ_SLOTS.length * EQ_SZ + (EQ_SLOTS.length - 1) * EQ_GAP;
+    let eqX = bx + Math.floor((PW - eqTotalW) / 2);
+
+    for (const eq of EQ_SLOTS) {
+      const item  = gs.player.equipment[eq.slot];
+      const bgClr = item ? 0x1e2a3a : 0x080c12;
+      const bdClr = item ? 0x4455aa : 0x223344;
+
+      this._pText(eqX + EQ_SZ / 2, curY, eq.label, '#445566', 9).setOrigin(0.5, 0);
+
+      const box = this._pAdd(
+        this.add.rectangle(eqX + EQ_SZ / 2, curY + EQ_LABEL_H + EQ_SZ / 2, EQ_SZ, EQ_SZ, bgClr)
+          .setStrokeStyle(1, bdClr).setScrollFactor(0).setInteractive({ useHandCursor: true })
+      );
+      const _bgClr = bgClr;
+      box.on('pointerover', () => box.setFillStyle(0x2a3a4a));
+      box.on('pointerout',  () => box.setFillStyle(_bgClr));
+      box.on('pointerdown', () => this._onInvEquipClick(eq.slot));
+
+      if (item) {
+        try {
+          this._pAdd(
+            this.add.image(eqX + EQ_SZ / 2, curY + EQ_LABEL_H + EQ_SZ / 2,
+              `item-${item.id ?? item.type}`).setScale(0.85).setScrollFactor(0)
+          );
+        } catch (e) { /* icon texture missing */ }
+        this._pText(eqX + EQ_SZ / 2, curY + EQ_LABEL_H + EQ_SZ + 1,
+          item.name, '#aabbcc', 8).setOrigin(0.5, 0);
+      } else {
+        this._pText(eqX + EQ_SZ / 2, curY + EQ_LABEL_H + EQ_SZ / 2,
+          '─', '#223344', 18).setOrigin(0.5, 0.5);
+      }
+
+      eqX += EQ_SZ + EQ_GAP;
+    }
+
+    curY += EQ_LABEL_H + EQ_SZ + 14; // label + slot + item-name clearance
+
+    // ── Bag grid ────────────────────────────────────────────────────────────
+    this._pText(bx + 12, curY, '── Bag ──', '#778899', 11);
+    curY += 16;
+
+    const COLS  = 6, SL_SZ = 44, SL_GAP = 5;
+    const gridW = COLS * SL_SZ + (COLS - 1) * SL_GAP; // 289
+    const startX = bx + Math.floor((PW - gridW) / 2);
+    const ROWS   = 4; // 24 slots / 6 cols = 4 rows
+
+    for (let i = 0; i < 24; i++) {
+      const col  = i % COLS;
+      const row  = Math.floor(i / COLS);
+      const sx   = startX + col * (SL_SZ + SL_GAP);
+      const sy   = curY   + row * (SL_SZ + SL_GAP);
+      const item = gs.player.inventory[i];
+      const bgC  = item ? 0x1a2233 : 0x070a0f;
+
+      const box = this._pAdd(
+        this.add.rectangle(sx + SL_SZ / 2, sy + SL_SZ / 2, SL_SZ, SL_SZ, bgC)
+          .setStrokeStyle(1, 0x1e2d3a).setScrollFactor(0)
+          .setInteractive({ useHandCursor: !!item })
+      );
+      if (item) {
+        const _bgC = bgC;
+        box.on('pointerover', () => box.setFillStyle(0x2a3a4a));
+        box.on('pointerout',  () => box.setFillStyle(_bgC));
+        box.on('pointerdown', () => this._onInvBagClick(i));
+        try {
+          this._pAdd(
+            this.add.image(sx + SL_SZ / 2, sy + SL_SZ / 2 - 2,
+              `item-${item.id ?? item.type}`).setScale(0.75).setScrollFactor(0)
+          );
+        } catch (e) { /* icon texture missing */ }
+        if (item.qty > 1) {
+          this._pText(sx + SL_SZ - 2, sy + SL_SZ - 12, String(item.qty), '#aaaacc', 9)
+            .setOrigin(1, 0);
+        }
+      }
+    }
+
+    const bagH = ROWS * (SL_SZ + SL_GAP) - SL_GAP;
+    curY += bagH + 8;
+
+    // ── Item tooltip ────────────────────────────────────────────────────────
+    const tooltipH = (by + PH) - curY - 4;
+    if (tooltipH >= 24) {
+      this._pAdd(
+        this.add.rectangle(bx + PW / 2, curY + tooltipH / 2, PW - 12, tooltipH, 0x080c12)
+          .setStrokeStyle(1, 0x1e2d3a).setScrollFactor(0)
+      );
+      this._invTooltipTxt = this._pText(
+        bx + 14, curY + 6,
+        'Tap an item or equipment slot for details.\nTap again to use / equip.',
+        '#445566', 10, PW - 28
+      ).setLineSpacing(2);
+    }
+  }
+
+  _onInvEquipClick(slot) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs) return;
+    const item = gs.player.equipment[slot];
+    if (!item) return;
+
+    if (this._invSelectedEquipSlot === slot) {
+      SFX.play('equip');
+      gs.player.unequipItem(slot);
+      gs._closePanel();
+      gs._openPanel(1);
+      return;
+    }
+    this._invSelectedEquipSlot = slot;
+    this._invSelectedSlot      = -1;
+
+    let d = `${item.name}\n\n${item.description ?? ''}`;
+    if (item.atk)       d += `\nATK: +${item.atk}`;
+    if (item.def)       d += `\nDEF: +${item.def}`;
+    if (item.hpBonus)   d += `\nHP:  +${item.hpBonus}`;
+    if (item.manaBonus) d += `\nMP:  +${item.manaBonus}`;
+    if (item.value)     d += `\nValue: ${item.value}g`;
+    d += '\n\n[Tap again to unequip]';
+    if (this._invTooltipTxt) this._invTooltipTxt.setText(d).setColor('#ccddee');
+  }
+
+  _onInvBagClick(i) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs) return;
+    const item = gs.player.inventory[i];
+    if (!item) return;
+
+    if (this._invSelectedSlot === i) {
+      if (item.type === ITEM_TYPE.POTION)    SFX.play('potion');
+      else if (item.type === ITEM_TYPE.GOLD) SFX.play('coin');
+      else                                   SFX.play('equip');
+      const result = gs.player.useItem(i);
+      if (result?.scrollEffect) gs._applyScrollEffect(result.scrollEffect);
+      gs._closePanel();
+      gs._openPanel(1);
+      return;
+    }
+    this._invSelectedSlot      = i;
+    this._invSelectedEquipSlot = null;
+
+    let d = `${item.name}\n\n${item.description ?? ''}`;
+    if (item.atk)       d += `\nATK: +${item.atk}`;
+    if (item.def)       d += `\nDEF: +${item.def}`;
+    if (item.hpBonus)   d += `\nHP:  +${item.hpBonus}`;
+    if (item.manaBonus) d += `\nMP:  +${item.manaBonus}`;
+    d += `\nValue: ${item.value}g`;
+    d += '\n\n[Tap again to use / equip]';
+    if (this._invTooltipTxt) this._invTooltipTxt.setText(d).setColor('#ccddee');
+  }
+
+  // ── Skills Panel ────────────────────────────────────────────────────────────
+
+  _renderPortraitSkills(bx, by, PW, PH) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs) return;
+
+    this._pText(bx + PW - 12, by, `Points: ${gs.player.skillPoints}`, '#ffd700', 13)
+      .setOrigin(1, 0);
+
+    const trees = Object.values(SKILL_TREES);
+    const colW  = Math.floor((PW - 8) / trees.length);
+
+    trees.forEach((tree, ti) => {
+      const cx = bx + 4 + ti * colW;
+      this._pText(cx + colW / 2, by + 16, tree.icon + ' ' + tree.name, tree.color, 12)
+        .setOrigin(0.5, 0);
+
+      tree.skills.forEach((skill, si) => {
+        const CARD_H = 58;
+        const sy = by + 34 + si * CARD_H;
+
+        const unlocked  = gs.player.skills.has(skill.id);
+        const canUnlock = !unlocked && gs.player.skillPoints > 0 &&
+          (!skill.prereq || gs.player.skills.has(skill.prereq));
+
+        const bgClr = unlocked ? 0x1a2a1a : canUnlock ? 0x1a1a2a : 0x070a0f;
+        const bdClr = unlocked ? 0x44aa44 : canUnlock ? 0x334466  : 0x1a1a2a;
+
+        const doUnlock = () => {
+          const gs2 = this.scene.get(SCENE.GAME);
+          if (gs2) gs2._tryUnlockSkill(skill.id);
+        };
+
+        const card = this._pAdd(
+          this.add.rectangle(cx + colW / 2, sy + 26, colW - 6, 52, bgClr)
+            .setStrokeStyle(1, bdClr).setScrollFactor(0)
+            .setInteractive({ useHandCursor: canUnlock })
+        );
+        if (canUnlock) card.on('pointerdown', doUnlock);
+
+        try {
+          this._pAdd(
+            this.add.image(cx + 12, sy + 10, `skill-${skill.id}`)
+              .setDisplaySize(18, 18).setScrollFactor(0)
+              .setTint(unlocked ? 0xffffff : canUnlock ? 0x8899cc : 0x444466)
+          );
+        } catch (e) { /* icon missing */ }
+
+        const nameClr = unlocked ? '#88ff88' : canUnlock ? '#88aacc' : '#445566';
+        this._pText(cx + 26, sy + 2,  skill.name, nameClr, 9);
+        const isActive = !!skill.active;
+        this._pText(cx + 26, sy + 14,
+          isActive ? `[${skill.active.cost}mp]` : '[passive]',
+          isActive ? '#5566aa' : '#446644', 8);
+        this._pText(cx + 4, sy + 28, skill.description, '#556677', 8, colW - 8);
+
+        if (unlocked) {
+          this._pText(cx + colW - 10, sy + 42, '✓', '#44ff44', 10).setOrigin(1, 0);
+        } else if (canUnlock) {
+          const btn = this._pText(cx + colW - 10, sy + 40, '[UNLOCK]', '#ffd700', 9)
+            .setOrigin(1, 0).setInteractive({ useHandCursor: true });
+          btn.on('pointerdown', doUnlock);
+        }
+      });
+    });
+  }
+
+  // ── Crafting Panel ──────────────────────────────────────────────────────────
+
+  _renderPortraitCrafting(bx, by, PW, PH) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs) return;
+
+    // Materials
+    this._pText(bx + 12, by, 'Materials in inventory:', '#778899', 11);
+    const matCounts = {};
+    for (const slot of gs.player.inventory) {
+      if (slot && slot.type === ITEM_TYPE.MATERIAL) {
+        matCounts[slot.id] = (matCounts[slot.id] ?? 0) + (slot.qty ?? 1);
+      }
+    }
+    const matStr = Object.entries(matCounts)
+      .map(([id, qty]) => `${ITEMS[id]?.name ?? id}: ${qty}`).join('   ') || 'None';
+    this._pText(bx + 12, by + 15, matStr, '#aabbcc', 10, PW - 24);
+
+    // Recipes
+    this._pText(bx + 12, by + 33, '── Recipes ──', '#778899', 11);
+
+    const recipes = getAvailableRecipes(gs.player);
+    const ROW_H   = 36;
+    recipes.forEach((recipe, i) => {
+      const ry = by + 50 + i * ROW_H;
+      if (ry + ROW_H > by + PH - 2) return; // overflow guard
+
+      const bgClr = recipe.canCraft ? 0x1a2a1a : 0x070a0f;
+      const bdClr = recipe.canCraft ? 0x44aa44 : 0x1e2d3a;
+      this._pAdd(
+        this.add.rectangle(bx + PW / 2, ry + ROW_H / 2, PW - 12, ROW_H - 2, bgClr)
+          .setStrokeStyle(1, bdClr).setScrollFactor(0)
+      );
+
+      const ingStr = recipe.ingredients
+        .map(ing => `${ITEMS[ing.id]?.name ?? ing.id}×${ing.qty}`).join(', ');
+      const resStr = `→ ${ITEMS[recipe.result.id]?.name ?? recipe.result.id}`;
+      this._pText(bx + 14, ry + 3,  recipe.name, recipe.canCraft ? '#88ff88' : '#445566', 11);
+      this._pText(bx + 14, ry + 18, ingStr + '  ' + resStr, '#556677', 9, PW - 100);
+
+      if (recipe.canCraft) {
+        const btn = this._pText(bx + PW - 14, ry + 12, '[CRAFT]', '#ffd700', 11)
+          .setOrigin(1, 0.5).setInteractive({ useHandCursor: true });
+        btn.on('pointerdown', () => {
+          const gs2 = this.scene.get(SCENE.GAME);
+          if (gs2) gs2._tryCraft(recipe.id);
+        });
+      }
+    });
+
+    if (recipes.length === 0) {
+      this._pText(bx + 12, by + 50, 'No recipes available yet.\nFind materials to unlock crafting.',
+        '#445566', 11, PW - 24);
+    }
+  }
+
+  // ── Character Panel ──────────────────────────────────────────────────────────
+
+  _renderPortraitChar(bx, by, PW, PH) {
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs) return;
+    const p = gs.player;
+    const lines = [
+      `Name:    ${p.name}`,
+      `Level:   ${p.level}   (XP: ${p.xp} / ${p.xpToNext})`,
+      ``,
+      `HP:      ${p.stats.hp} / ${p.stats.maxHp}`,
+      `Mana:    ${p.stats.mana} / ${p.stats.maxMana}`,
+      `Gold:    ${p.gold}`,
+      ``,
+      `Attack:  ${p.stats.atk}  (base ${p.baseStats.atk} + equip/skills)`,
+      `Defense: ${p.stats.def}  (base ${p.baseStats.def} + equip/skills)`,
+      `Speed:   ${p.stats.spd}`,
+      `Crit:    ${Math.round((p.stats.critChance ?? 0.05) * 100)}%`,
+      `Dodge:   ${Math.round((p.stats.dodgeChance ?? 0) * 100)}%`,
+      ``,
+      `── Equipment ──`,
+      `Weapon:  ${p.equipment.weapon?.name ?? 'None'}`,
+      `Armor:   ${p.equipment.armor?.name  ?? 'None'}`,
+      `Ring:    ${p.equipment.ring?.name   ?? 'None'}`,
+      `Amulet:  ${p.equipment.amulet?.name ?? 'None'}`,
+      ``,
+      `── Skills Unlocked ──`,
+      p.skills.size ? [...p.skills].join(', ') : 'None',
+    ];
+    this._pText(bx + 14, by + 4, lines.join('\n'), '#ccddee', 12, PW - 28)
+      .setLineSpacing(3);
   }
 }
