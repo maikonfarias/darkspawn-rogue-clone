@@ -1326,6 +1326,19 @@ export class GameScene extends Phaser.Scene {
     this.activePanel = panel;
 
     const cam = this.cameras.main;
+
+    // Snap the camera to the player's exact centre so panel world-coordinates
+    // map to stable screen positions.  Without this, a lerp-lagged camera
+    // (camera still catching up after a move) causes the panel to drift left
+    // and upward as the camera settles, cutting off panel content on mobile.
+    if (this.playerSprite) {
+      const sf = 1 / cam.zoom;
+      cam.setScroll(
+        this.playerSprite.x - cam.width * sf / 2,
+        this.playerSprite.y - cam.height * sf / 2,
+      );
+    }
+
     const W = cam.width, H = cam.height;
 
     switch (panel) {
