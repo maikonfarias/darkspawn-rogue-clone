@@ -92,6 +92,10 @@ export class GameScene extends Phaser.Scene {
   update() {
     if (this.activePanel !== PANEL.NONE || this.gamePaused) return;
 
+    // Block all player input while UIScene inventory pad mode is active
+    const _ui = this.scene.get(SCENE.UI);
+    if (_ui?._invPadMode) return;
+
     const now = Date.now();
 
     // ── Keyboard hold-to-walk (skip while targeting) ──────
@@ -228,6 +232,7 @@ export class GameScene extends Phaser.Scene {
     if (this._pathGraphics) { this._pathGraphics.destroy(); this._pathGraphics = null; }
     if (this._statusIconGraphics) this._statusIconGraphics.clear();
     if (this._aoeGraphics) this._aoeGraphics.clear();
+    if (this._actionHint) { this._actionHint.destroy(); this._actionHint = null; }
     this._cancelClickWalk();
     // Destroy portal sprite whenever floors change
     if (this._portalSprite) { this._portalSprite.destroy(); this._portalSprite = null; }
@@ -420,6 +425,13 @@ export class GameScene extends Phaser.Scene {
     this.playerHpBar = this._makeHealthBar(this.entityLayer, 0, 0, T, 4);
     this.entityLayer.add(this.playerHpBar.bg);
     this.entityLayer.add(this.playerHpBar.fill);
+
+    // Controller context hint (shown above player on interactable tiles)
+    this._actionHint = this.add.text(0, 0, '\u24b6  ENTER', {
+      fontFamily: 'Courier New', fontSize: '10px', color: '#00ff88',
+      stroke: '#000000', strokeThickness: 3,
+      backgroundColor: null,
+    }).setOrigin(0.5, 1).setDepth(28).setVisible(false);
   }
 
   _buildFogLayer() {
@@ -555,6 +567,23 @@ export class GameScene extends Phaser.Scene {
     // Player sprite
     this.playerSprite.setPosition(this.player.x * T + T / 2, this.player.y * T + T / 2);
 
+    // Action hint above player on stairs / portal (Ⓐ ENTER with controller, ENTER with keyboard)
+    if (this._actionHint) {
+      const px = this.player.x, py = this.player.y;
+      const tile = this.grid[py]?.[px];
+      const onPortal = this.floor === 0 && this._portalReturn &&
+                       this._portalPos && px === this._portalPos.x && py === this._portalPos.y;
+      const onInteract = tile === TILE.STAIRS_DOWN || tile === TILE.STAIRS_UP || onPortal;
+      if (onInteract && !this.gamePaused) {
+        this._actionHint
+          .setText(this._controllerMode ? '\u24b6  ENTER' : 'ENTER')
+          .setPosition(px * T + T / 2, py * T - 2)
+          .setVisible(true);
+      } else {
+        this._actionHint.setVisible(false);
+      }
+    }
+
     // Player HP bar (below sprite)
     const pHpRatio = Math.max(0, this.player.stats.hp / this.player.stats.maxHp);
     this.playerHpBar.bg.setPosition(this.player.x * T, this.player.y * T + T - 4);
@@ -621,6 +650,7 @@ export class GameScene extends Phaser.Scene {
     };
 
     kb.on('keydown', (event) => {
+      this._controllerMode = false; // keyboard input deactivates controller mode
       this._cancelClickWalk();
       if (!this.heldKeys[event.code]) this.heldKeys[event.code] = Date.now();
       this._onKeyDown(event);
@@ -639,7 +669,8 @@ export class GameScene extends Phaser.Scene {
     this._padTargetNavHeld    = null;
     this._padTargetNavLast    = 0;
 
-    this.input.on('pointerdown', (ptr) => this._onPointerDown(ptr));
+    this.input.on('pointermove',  ()    => { this._controllerMode = false; });
+    this.input.on('pointerdown', (ptr) => { this._controllerMode = false; this._onPointerDown(ptr); });
     this.input.on('pointerdown', (ptr) => { if (ptr.rightButtonDown()) this._cancelClickWalk(); });
   }
 

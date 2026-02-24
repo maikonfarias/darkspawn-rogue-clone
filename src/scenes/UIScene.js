@@ -55,6 +55,7 @@ export class UIScene extends Phaser.Scene {
 
     // Gamepad
     this._padPrevStart        = {}; // padIndex → wasPressed (for Start edge detect)
+    this._padPrevSelect       = {}; // padIndex → wasPressed (for Select/Back button 8)
     this._pausePadPrev        = { up: false, down: false, a: false, b: false };
     this._pauseNavHeldSince   = null;
     this._pauseNavLastRepeat  = 0;
@@ -62,6 +63,13 @@ export class UIScene extends Phaser.Scene {
     this._pauseCursor         = null;
     this._pauseSelIdx         = 0;
     this._instrClose          = null; // set when instructions overlay is open
+    // Inventory pad navigation
+    this._invPadMode          = false;
+    this._invPadIdx           = 0;
+    this._invPadNavHeld       = null;
+    this._invPadNavLast       = 0;
+    this._invPadNavPrev       = { up: false, down: false, left: false, right: false };
+    this._invPadActionPrev    = { a: false, b: false, y: false };
 
     // Portrait panel overlay (panels rendered in UIScene for correct 1:1 screen coords)
     this.bus.on('panel-open',  (type) => this._showPanel(type));
@@ -99,24 +107,40 @@ export class UIScene extends Phaser.Scene {
     const gp = this.input.gamepad;
     if (!gp || gp.total === 0) return;
     const DEAD = 0.4;
-    let startPressed = false, navUp = false, navDown = false, navA = false, navB = false;
+    let startPressed = false, selectPressed = false;
+    let navUp = false, navDown = false, navLeft = false, navRight = false;
+    let navA = false, navB = false;
 
     for (const pad of gp.gamepads) {
       if (!pad) continue;
       const pi      = pad.index;
       const prevS   = this._padPrevStart?.[pi] ?? false;
-      const startNow = !!pad.buttons[9]?.pressed;
+      const startNow  = !!pad.buttons[9]?.pressed;
+      const selectNow = !!pad.buttons[8]?.pressed;
 
       // Start button — edge: toggle pause
       if (startNow && !prevS) startPressed = true;
       if (this._padPrevStart) this._padPrevStart[pi] = startNow;
 
+      // Select/Back button — edge: toggle inventory mode
+      const prevSel = this._padPrevSelect?.[pi] ?? false;
+      if (selectNow && !prevSel) selectPressed = true;
+      if (this._padPrevSelect) this._padPrevSelect[pi] = selectNow;
+
       // Navigation inputs
+      const sx = pad.leftStick?.x ?? pad.axes[0]?.value ?? 0;
       const sy = pad.leftStick?.y ?? pad.axes[1]?.value ?? 0;
-      if (pad.buttons[12]?.pressed || sy < -DEAD) navUp   = true;
-      if (pad.buttons[13]?.pressed || sy >  DEAD) navDown = true;
+      if (pad.buttons[12]?.pressed || sy < -DEAD) navUp    = true;
+      if (pad.buttons[13]?.pressed || sy >  DEAD) navDown  = true;
+      if (pad.buttons[14]?.pressed || sx < -DEAD) navLeft  = true;
+      if (pad.buttons[15]?.pressed || sx >  DEAD) navRight = true;
       if (pad.buttons[0]?.pressed) navA = true;
       if (pad.buttons[1]?.pressed) navB = true;
+    }
+    let navY = false;
+    for (const pad of gp.gamepads) {
+      if (!pad) continue;
+      if (pad.buttons[3]?.pressed) navY = true;
     }
 
     // Start button toggles pause
@@ -129,6 +153,51 @@ export class UIScene extends Phaser.Scene {
     }
 
     const prev = this._pausePadPrev;
+
+    // ── Inventory pad mode ──
+    if (selectPressed && !this._pauseBtns && !this._instrClose) {
+      if (this._invPadMode) this._invPadDeactivate();
+      else                  this._invPadActivate();
+    }
+    if (this._invPadMode && !this._pauseBtns && !this._instrClose) {
+      const COLS  = 4;
+      const total = this._invAllSlots().length;
+      const now   = Date.now();
+      const any   = navUp || navDown || navLeft || navRight;
+      const np    = this._invPadNavPrev;
+      const justU = navUp    && !np.up;
+      const justD = navDown  && !np.down;
+      const justL = navLeft  && !np.left;
+      const justR = navRight && !np.right;
+      const just  = justU || justD || justL || justR;
+
+      if (!any) this._invPadNavHeld = null;
+
+      let doNav = false;
+      if (just) { this._invPadNavHeld = now; this._invPadNavLast = now; doNav = true; }
+      else if (any && this._invPadNavHeld !== null &&
+               now - this._invPadNavHeld >= 380 && now - this._invPadNavLast >= 160) {
+        this._invPadNavLast = now; doNav = true;
+      }
+
+      if (doNav && total > 0) {
+        let dir = 0;
+        if (navLeft)  dir = -1;
+        if (navRight) dir =  1;
+        if (navUp)    dir = -COLS;
+        if (navDown)  dir =  COLS;
+        this._invPadSelectSlot(Math.max(0, Math.min(total - 1, this._invPadIdx + dir)));
+      }
+
+      this._invPadNavPrev = { up: navUp, down: navDown, left: navLeft, right: navRight };
+
+      const ap = this._invPadActionPrev;
+      if (navA && !ap.a) this._invPadAction();
+      if (navB && !ap.b) this._invPadDeactivate();
+      if (navY && !ap.y) this._invPadDrop();
+      this._invPadActionPrev = { a: navA, b: navB, y: navY };
+      return;
+    }
 
     // ── Instructions overlay: A or B closes ──
     if (this._instrClose) {
@@ -178,6 +247,107 @@ export class UIScene extends Phaser.Scene {
         .setPosition(sel.obj.x - sel.obj.displayWidth / 2 - 10, sel.obj.y)
         .setVisible(true);
     }
+  }
+
+  // ── Inventory pad navigation ──────────────────────────────────────
+
+  /** Flat ordered slot list: equip row first, then bag rows (4 cols each). */
+  _invAllSlots() {
+    return [...(this._equipSlots ?? []), ...(this._invSlots ?? [])];
+  }
+
+  _invPadActivate() {
+    const gs = this.scene.get(SCENE.GAME);
+    if (gs?.gamePaused || gs?.activePanel !== 0) return;
+    // Cancel any active targeting before entering inventory
+    if (gs?.targeting) {
+      gs._cancelTargeting();
+      this._clearSkillSelection?.();
+    }
+    this._invPadMode = true;
+    this._invPadNavHeld = null;
+    this._invPadNavPrev = { up: false, down: false, left: false, right: false };
+    this._invPadActionPrev = { a: false, b: false, y: false };
+    // Default cursor: first bag slot (after equip row)
+    const equipCount = this._equipSlots?.length ?? 0;
+    this._invPadIdx = equipCount;
+    this._invPadSelectSlot(this._invPadIdx);
+    this.bus.emit(EV.LOG_MSG, { text: 'Inventory — D-Pad: navigate  A: use/equip  Y: drop  B: close', color: '#6688aa' });
+  }
+
+  _invPadDeactivate() {
+    this._invPadMode = false;
+    this._clearSelection();
+  }
+
+  /** Drop the currently selected bag item onto the player's tile. Equip slots cannot be dropped directly. */
+  _invPadDrop() {
+    if (!this._invPadMode) return;
+    const equipCount = this._equipSlots?.length ?? 0;
+    if (this._invPadIdx < equipCount) return; // equip row — no drop
+    const invIdx = this._invPadIdx - equipCount;
+    const slot = this._invSlots?.[invIdx];
+    if (!slot?._item) return;
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player) return;
+    const dropped = gs.player.dropItem(invIdx);
+    if (!dropped) return;
+    gs.floorItems.push({ x: gs.player.x, y: gs.player.y, item: dropped });
+    gs._rebuildItemSprites();
+    SFX.play('equip');
+    this.bus.emit(EV.LOG_MSG, { text: `Dropped ${dropped.name}.`, color: '#aaaacc' });
+    gs._endPlayerTurn?.();
+    // Keep pad cursor on same index; slot is now empty
+    this._invPadSelectSlot(this._invPadIdx);
+  }
+
+  /** Drop the currently tooltip-selected bag item (works for both mouse and pad). */
+  _dropSelectedItem() {
+    if (this._invPadMode) { this._invPadDrop(); return; }
+    if (!this._selSlot || this._selSrc !== 'inv') return;
+    const gs = this.scene.get(SCENE.GAME);
+    if (!gs?.player) return;
+    const dropped = gs.player.dropItem(this._selSlot.index);
+    if (!dropped) return;
+    gs.floorItems.push({ x: gs.player.x, y: gs.player.y, item: dropped });
+    gs._rebuildItemSprites();
+    gs._render();
+    gs._endPlayerTurn?.();
+    SFX.play('equip');
+    this.bus.emit(EV.LOG_MSG, { text: `Dropped ${dropped.name}.`, color: '#aaaacc' });
+    this._clearSelection();
+    this._refreshInventory();
+  }
+
+  /**
+   * Set the pad cursor to slot at flat index `idx`.
+   * Always shows green border; shows tooltip only if the slot has an item.
+   */
+  _invPadSelectSlot(idx) {
+    const allSlots = this._invAllSlots();
+    if (!allSlots.length) return;
+    this._invPadIdx = Math.max(0, Math.min(allSlots.length - 1, idx));
+    const slot = allSlots[this._invPadIdx];
+    const src  = this._invPadIdx < (this._equipSlots?.length ?? 0) ? 'equip' : 'inv';
+    this._setSelection(slot, src);
+    if (slot._item) this._showInvTooltip(slot._item);
+    else            this._hideInvTooltip();
+  }
+
+  /**
+   * Confirm action (A button) on the currently highlighted pad slot.
+   * Performs use/equip, then re-selects the same index so the cursor stays.
+   */
+  _invPadAction() {
+    if (!this._invPadMode) return;
+    const slot = this._invAllSlots()[this._invPadIdx];
+    if (!slot?._item) return;
+    const src = this._invPadIdx < (this._equipSlots?.length ?? 0) ? 'equip' : 'inv';
+    this._setSelection(slot, src); // ensure _selSlot / _selSrc are current
+    this._doTooltipAction();       // performs action, calls _clearSelection + _refreshInventory
+    // Restore pad cursor to same index (slot may now be empty)
+    this._invPadMode = true;       // _doTooltipAction doesn’t touch _invPadMode
+    this._invPadSelectSlot(this._invPadIdx);
   }
 
   _buildHUD() {
@@ -552,18 +722,31 @@ export class UIScene extends Phaser.Scene {
       fontFamily: 'Courier New', fontSize: '10px', color: '#ccaa44',
     }).setScrollFactor(0).setDepth(7).setVisible(false);
     // Action button (USE / EQUIP / UNEQUIP)
-    const ttActionBtn = this.add.rectangle(TX + TW / 2, TY + PH - 28, TW - 20, 22, 0x1a3322, 1)
+    const ttActionBtn = this.add.rectangle(TX + TW / 2, TY + PH - 38, TW - 20, 22, 0x1a3322, 1)
       .setStrokeStyle(1, 0x00cc44).setScrollFactor(0).setDepth(7).setVisible(false)
       .setInteractive({ useHandCursor: true });
-    const ttActionLbl = this.add.text(TX + TW / 2, TY + PH - 28, 'USE', {
+    const ttActionLbl = this.add.text(TX + TW / 2, TY + PH - 38, 'USE', {
       fontFamily: 'Courier New', fontSize: '11px', color: '#00ff88',
     }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(8).setVisible(false);
     ttActionBtn.on('pointerover', () => ttActionBtn.setFillStyle(0x2a4432));
     ttActionBtn.on('pointerout',  () => ttActionBtn.setFillStyle(0x1a3322));
     ttActionBtn.on('pointerdown', () => this._doTooltipAction());
+    // Controller badge: green Ⓐ on left side of action button (pad mode only)
+    const ttABadge = this.add.text(TX + 26, TY + PH - 38, '\u24b6', {
+      fontFamily: 'Courier New', fontSize: '13px', color: '#00ff88',
+    }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(9).setVisible(false);
+    // Drop hint: yellow below action button (all bag slots; Ⓨ icon only in pad mode)
+    const ttYHint = this.add.text(TX + TW / 2, TY + PH - 5, 'DROP ITEM', {
+      fontFamily: 'Courier New', fontSize: '10px', color: '#ffd700',
+    }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(8).setVisible(false)
+      .setInteractive({ useHandCursor: true });
+    ttYHint.on('pointerover', () => ttYHint.setAlpha(0.7));
+    ttYHint.on('pointerout',  () => ttYHint.setAlpha(1.0));
+    ttYHint.on('pointerdown', () => this._dropSelectedItem());
     this._invTooltip = { bg: ttBg, title: ttTitle, icon: ttIcon, name: ttName,
       type: ttType, stats: ttStats, desc: ttDesc, value: ttValue,
-      actionBtn: ttActionBtn, actionLbl: ttActionLbl };
+      actionBtn: ttActionBtn, actionLbl: ttActionLbl,
+      aBadge: ttABadge, yHint: ttYHint };
   }
 
   _refreshInventory() {
@@ -577,7 +760,8 @@ export class UIScene extends Phaser.Scene {
       slot._item = item;
 
       // Auto-clear selection if the selected item disappeared
-      if (slot === this._selSlot && !item) {
+      // (skip in pad mode — pad cursor keeps the green border on empty slots)
+      if (slot === this._selSlot && !item && !this._invPadMode) {
         this._selSlot = null;
         this._selSrc  = null;
         this._hideInvTooltip();
@@ -592,7 +776,12 @@ export class UIScene extends Phaser.Scene {
         slot.icon.setTexture(`item-${item.id ?? item.type}`).setVisible(true);
         slot.qty.setText(item.qty > 1 ? String(item.qty) : '');
       } else {
-        slot.bg.setFillStyle(0x111118).setStrokeStyle(1, 0x223344);
+        // Empty: keep green border if this is the active pad cursor slot
+        if (this._invPadMode && slot === this._selSlot) {
+          slot.bg.setFillStyle(0x0d2210).setStrokeStyle(2, 0x00cc44);
+        } else {
+          slot.bg.setFillStyle(0x111118).setStrokeStyle(1, 0x223344);
+        }
         slot.icon.setVisible(false);
         slot.qty.setText('');
       }
@@ -640,9 +829,23 @@ export class UIScene extends Phaser.Scene {
     if (lbl) {
       tt.actionLbl.setText(lbl).setVisible(true);
       tt.actionBtn.setVisible(true);
+      // Ⓐ badge: show in pad mode
+      if (this._invPadMode) {
+        tt.aBadge?.setVisible(true);
+      } else {
+        tt.aBadge?.setVisible(false);
+      }
     } else {
       tt.actionLbl.setVisible(false);
       tt.actionBtn.setVisible(false);
+      tt.aBadge?.setVisible(false);
+    }
+    // Drop hint: any bag slot (Ⓨ icon in pad mode, plain text for mouse)
+    const isBagSlot = !isEquipSrc;
+    if (isBagSlot) {
+      tt.yHint?.setText(this._invPadMode ? '\u24ce  DROP ITEM' : 'DROP ITEM').setVisible(true);
+    } else {
+      tt.yHint?.setVisible(false);
     }
     tt.title.setVisible(true);
     tt.bg.setVisible(true);
@@ -661,6 +864,8 @@ export class UIScene extends Phaser.Scene {
     tt.value.setVisible(false);
     tt.actionBtn?.setVisible(false);
     tt.actionLbl?.setVisible(false);
+    tt.aBadge?.setVisible(false);
+    tt.yHint?.setVisible(false);
   }
 
   // ── Unified selection helpers ────────────────────────────
@@ -846,7 +1051,8 @@ export class UIScene extends Phaser.Scene {
       slot._item = item;
 
       // Auto-clear selection if the selected item disappeared
-      if (slot === this._selSlot && !item) {
+      // (skip in pad mode — pad cursor keeps green border on empty slots)
+      if (slot === this._selSlot && !item && !this._invPadMode) {
         this._selSlot = null;
         this._selSrc  = null;
         this._hideInvTooltip();
@@ -861,7 +1067,12 @@ export class UIScene extends Phaser.Scene {
         slot.icon.setTexture(`item-${item.id ?? item.type}`).setVisible(true);
         slot.shadow.setVisible(false);
       } else {
-        slot.bg.setFillStyle(0x111118).setStrokeStyle(1, 0x223344);
+        // Empty: keep green border if this is the active pad cursor slot
+        if (this._invPadMode && slot === this._selSlot) {
+          slot.bg.setFillStyle(0x0d2210).setStrokeStyle(2, 0x00cc44);
+        } else {
+          slot.bg.setFillStyle(0x111118).setStrokeStyle(1, 0x223344);
+        }
         slot.icon.setVisible(false);
         slot.shadow.setVisible(true);
       }

@@ -153,7 +153,7 @@ export class Player {
   dropItem(slotIndex) {
     const item = this.inventory[slotIndex];
     if (!item) return null;
-    removeFromInventory(this, slotIndex);
+    this.inventory[slotIndex] = null; // drop entire stack
     this.events.emit(EV.STATS_CHANGED);
     return item;
   }

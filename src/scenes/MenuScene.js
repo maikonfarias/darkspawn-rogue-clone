@@ -110,6 +110,7 @@ export class MenuScene extends Phaser.Scene {
     this._updateMenuSel(0);
 
     // Controls reference (desktop only — shown as inline hint on portrait)
+    this._kbHints = [];
     if (!portrait) {
       const controls = [
         'MOVE: WASD / Arrow Keys    ATTACK: Bump into enemy',
@@ -118,19 +119,31 @@ export class MenuScene extends Phaser.Scene {
         'SKILLS: K                  CRAFTING: C     CHAR: P',
       ];
       controls.forEach((line, i) => {
-        this.add.text(W / 2, H - 100 + i * 18, line, {
+        const t = this.add.text(W / 2, H - 100 + i * 18, line, {
           fontFamily: 'Courier New, monospace',
           fontSize: '12px',
           color: '#445566',
         }).setOrigin(0.5);
+        this._kbHints.push(t);
       });
     } else {
-      this.add.text(W / 2, H - 54, 'Use D-Pad or tap to move · Tap buttons to act', {
+      const t = this.add.text(W / 2, H - 54, 'Use D-Pad or tap to move · Tap buttons to act', {
         fontFamily: 'Courier New, monospace',
         fontSize: '11px',
         color: '#445566',
       }).setOrigin(0.5);
+      this._kbHints.push(t);
     }
+
+    // Controller hint — shown instead of keyboard hints when a gamepad is active
+    const hintY = portrait ? H - 54 : H - 72;
+    this._padConfirmHint = this.add.text(W / 2, hintY, 'Ⓐ  CONFIRM', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '14px',
+      color: '#00ff88',
+      stroke: '#000000',
+      strokeThickness: 3,
+    }).setOrigin(0.5).setVisible(false);
 
     // Version
     this.add.text(8, H - 18, 'v1.0', {
@@ -261,6 +274,9 @@ export class MenuScene extends Phaser.Scene {
     if (this._controllerMode) return;
     this._controllerMode = true;
     this._updateMenuSel(this._selIdx); // applies dim + shows cursor
+    // Swap hints
+    if (this._kbHints)        this._kbHints.forEach(t => t.setVisible(false));
+    if (this._padConfirmHint) this._padConfirmHint.setVisible(true);
   }
 
   _deactivateControllerMode() {
@@ -269,6 +285,9 @@ export class MenuScene extends Phaser.Scene {
     // Restore all buttons to full alpha, hide cursor
     if (this._menuBtns) this._menuBtns.forEach(b => b.obj.setAlpha(1.0));
     if (this._menuCursor) this._menuCursor.setVisible(false);
+    // Swap hints back
+    if (this._kbHints)        this._kbHints.forEach(t => t.setVisible(true));
+    if (this._padConfirmHint) this._padConfirmHint.setVisible(false);
   }
 
   _updateMenuSel(idx) {

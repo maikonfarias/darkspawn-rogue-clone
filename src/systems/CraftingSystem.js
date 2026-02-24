@@ -82,8 +82,11 @@ function removeItems(player, itemId, qty) {
 }
 
 export function addToInventory(player, item) {
-  // Try stacking
-  if (item.qty > 0) {
+  // Equipment items (anything with a slot) never stack — each piece occupies its own slot
+  const isEquipment = !!item.slot;
+
+  // Try stacking (non-equipment only)
+  if (!isEquipment && item.qty > 0) {
     for (const slot of player.inventory) {
       if (slot?.id === item.id && slot.id !== undefined) {
         slot.qty = (slot.qty ?? 1) + (item.qty ?? 1);
@@ -94,7 +97,7 @@ export function addToInventory(player, item) {
   // Find empty slot
   const emptyIdx = player.inventory.findIndex(s => s === null);
   if (emptyIdx === -1) return false;
-  player.inventory[emptyIdx] = { ...item };
+  player.inventory[emptyIdx] = { ...item, qty: isEquipment ? 1 : (item.qty ?? 1) };
   return true;
 }
 
