@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Darkspawn Rogue Quest</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -12,8 +12,12 @@
       justify-content: center;
       align-items: center;
       height: 100vh;
+      height: 100dvh;
       overflow: hidden;
+      touch-action: none;
       font-family: 'Courier New', monospace;
+      -webkit-user-select: none;
+      user-select: none;
     }
     #game-container {
       position: relative;
@@ -22,6 +26,7 @@
       display: block;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
+      touch-action: none;
     }
   </style>
 </head>

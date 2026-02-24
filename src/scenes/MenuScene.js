@@ -27,18 +27,23 @@ export class MenuScene extends Phaser.Scene {
       this.particles.push(p);
     }
 
+    const portrait = !!window.PORTRAIT;
+    const titleY   = portrait ? 60  : 80;
+    const subtitleY = portrait ? 105 : 125;
+    const loreY    = portrait ? 140 : 165;
+
     // Title
-    this.add.text(W / 2, 80, '⚔  DARKSPAWN ROGUE QUEST  ⚔', {
+    this.add.text(W / 2, titleY, '⚔  DARKSPAWN ROGUE QUEST  ⚔', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '32px',
+      fontSize: portrait ? '22px' : '32px',
       color: '#ffd700',
       stroke: '#000000',
       strokeThickness: 4,
     }).setOrigin(0.5);
 
-    this.add.text(W / 2, 125, 'Explore · Battle · Survive', {
+    this.add.text(W / 2, subtitleY, 'Explore · Battle · Survive', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
+      fontSize: portrait ? '13px' : '16px',
       color: '#88aacc',
     }).setOrigin(0.5);
 
@@ -49,56 +54,66 @@ export class MenuScene extends Phaser.Scene {
       'Will you emerge victorious... or join the fallen?',
     ];
     lore.forEach((line, i) => {
-      this.add.text(W / 2, 165 + i * 22, line, {
+      this.add.text(W / 2, loreY + i * (portrait ? 18 : 22), line, {
         fontFamily: 'Courier New, monospace',
-        fontSize: '13px',
+        fontSize: portrait ? '11px' : '13px',
         color: '#556677',
         fontStyle: 'italic',
       }).setOrigin(0.5);
     });
 
-    // Buttons — shift down if save exists to make room for Continue
+    // Buttons
     const hasSaveFile = hasSave();
-    const btnOffset = hasSaveFile ? 35 : 0;
+    const btnBaseY    = portrait ? H / 2 - 20 : H / 2;
+    const btnOffset   = hasSaveFile ? (portrait ? 30 : 35) : 0;
+    const btnFontSize = portrait ? '16px' : '20px';
 
     if (hasSaveFile) {
       const ts = saveTimestamp();
-      this._makeButton(W / 2, H / 2 - 30, '  [ CONTINUE ]  ', '#88ffcc', '#001a10', () => {
+      this._makeButton(W / 2, btnBaseY - 30, '  [ CONTINUE ]  ', '#88ffcc', '#001a10', btnFontSize, () => {
         Music.stop(1.5);
         this.scene.start(SCENE.GAME, { loadSave: true });
         this.scene.launch(SCENE.UI);
       });
       if (ts) {
-        this.add.text(W / 2, H / 2 + 6, ts, {
+        this.add.text(W / 2, btnBaseY + 6, ts, {
           fontFamily: 'Courier New', fontSize: '11px', color: '#445544',
         }).setOrigin(0.5);
       }
     }
 
-    this._makeButton(W / 2, H / 2 + 30 + btnOffset, '  [ NEW GAME ]  ', '#ffd700', '#221100', () => {
+    this._makeButton(W / 2, btnBaseY + 30 + btnOffset, '  [ NEW GAME ]  ', '#ffd700', '#221100', btnFontSize, () => {
       Music.stop(1.5);
       this.scene.start(SCENE.GAME, { loadSave: false });
       this.scene.launch(SCENE.UI);
     });
 
-    this._makeButton(W / 2, H / 2 + 90 + btnOffset, '  [ HOW TO PLAY ]  ', '#88aacc', '#001122', () => {
+    this._makeButton(W / 2, btnBaseY + 90 + btnOffset, '  [ HOW TO PLAY ]  ', '#88aacc', '#001122', btnFontSize, () => {
       this._showHelp();
     });
 
-    // Controls reference (always visible)
-    const controls = [
-      'MOVE: WASD / Arrow Keys    ATTACK: Bump into enemy',
-      'PICK UP: G                 WAIT: . (period)',
-      'USE STAIRS: > or <         INVENTORY: I',
-      'SKILLS: K                  CRAFTING: C     CHAR: P',
-    ];
-    controls.forEach((line, i) => {
-      this.add.text(W / 2, H - 100 + i * 18, line, {
+    // Controls reference (desktop only — shown as inline hint on portrait)
+    if (!portrait) {
+      const controls = [
+        'MOVE: WASD / Arrow Keys    ATTACK: Bump into enemy',
+        'PICK UP: G                 WAIT: . (period)',
+        'USE STAIRS: > or <         INVENTORY: I',
+        'SKILLS: K                  CRAFTING: C     CHAR: P',
+      ];
+      controls.forEach((line, i) => {
+        this.add.text(W / 2, H - 100 + i * 18, line, {
+          fontFamily: 'Courier New, monospace',
+          fontSize: '12px',
+          color: '#445566',
+        }).setOrigin(0.5);
+      });
+    } else {
+      this.add.text(W / 2, H - 54, 'Use D-Pad or tap to move · Tap buttons to act', {
         fontFamily: 'Courier New, monospace',
-        fontSize: '12px',
+        fontSize: '11px',
         color: '#445566',
       }).setOrigin(0.5);
-    });
+    }
 
     // Version
     this.add.text(8, H - 18, 'v1.0', {
@@ -116,7 +131,7 @@ export class MenuScene extends Phaser.Scene {
       btn.on('pointerdown', () => { onClick(); btn.setText(labelFn()); });
       return btn;
     };
-    mkAudioBtn(W - 6,      H - 6, () => `♪ MUSIC: ${Music.isPlaying ? 'ON' : 'OFF'}`,
+    mkAudioBtn(W - 6,       H - 6, () => `♪ MUSIC: ${Music.isPlaying ? 'ON' : 'OFF'}`,
       () => { if (Music.isPlaying) Music.stop(0.5); else Music.play('menu'); });
     mkAudioBtn(W - 6 - 130, H - 6, () => `🔊 SFX: ${SFX.muted ? 'OFF' : 'ON'}`,
       () => { SFX.muted = !SFX.muted; });
@@ -138,10 +153,22 @@ export class MenuScene extends Phaser.Scene {
     }
   }
 
-  _makeButton(x, y, label, textColor, bgColor, callback) {
+  /**
+   * Create a clickable button text object.
+   * @param {number} x - Horizontal centre position.
+   * @param {number} y - Vertical centre position.
+   * @param {string} label - Button label text.
+   * @param {string} textColor - Label colour hex string.
+   * @param {string} bgColor - Background colour hex string.
+   * @param {string|function} fontSize - CSS font-size string, or callback for 5-arg legacy call.
+   * @param {function} [callback] - Click / Enter handler.
+   */
+  _makeButton(x, y, label, textColor, bgColor, fontSize, callback) {
+    // Support old 5-arg signature (no fontSize)
+    if (typeof fontSize === 'function') { callback = fontSize; fontSize = '20px'; }
     const btn = this.add.text(x, y, label, {
       fontFamily: 'Courier New, monospace',
-      fontSize: '20px',
+      fontSize,
       color: textColor,
       backgroundColor: bgColor,
       padding: { x: 16, y: 8 },
@@ -168,8 +195,9 @@ export class MenuScene extends Phaser.Scene {
     // Dim overlay
     const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6);
 
-    // Panel
-    const PW = 700, PH = 610;
+    // Panel — clamped to screen size for portrait mode
+    const PW = Math.min(700, W - 16);
+    const PH = Math.min(610, H - 16);
     const PX = W / 2 - PW / 2, PY = H / 2 - PH / 2;
     const panel = this.add.rectangle(W / 2, H / 2, PW, PH, 0x0a0a14, 0.98)
       .setStrokeStyle(2, 0x334466);

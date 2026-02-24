@@ -71,6 +71,12 @@ export class UIScene extends Phaser.Scene {
     // Disable browser right-click context menu over the canvas
     this.input.mouse?.disableContextMenu();
 
+    // In portrait mode, use a compact mobile-friendly layout
+    if (window.PORTRAIT) {
+      this._buildHUD_portrait(W, H);
+      return;
+    }
+
     // ── Top-left stats panel ────────────────────────────────
     const PW = 210, PH = 240;
     const PX = 6, PY = 6;
@@ -766,9 +772,9 @@ export class UIScene extends Phaser.Scene {
 
   // ── Minimap ─────────────────────────────────────────────
 
-  _buildMinimap(W) {
+  _buildMinimap(W, startY = MM_Y) {
     const mmX = W - MM_W - 6;
-    const mmY = MM_Y;
+    const mmY = startY;
     this._mmX = mmX;
     this._mmY = mmY;
 
@@ -1198,7 +1204,8 @@ export class UIScene extends Phaser.Scene {
     add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.55)
       .setScrollFactor(0).setDepth(60).setInteractive());
 
-    const PW = 860, PH = 640;
+    const PW = Math.min(860, W - 16);
+    const PH = Math.min(640, H - 16);
     const PX = W / 2 - PW / 2;
     const PY = H / 2 - PH / 2;
     add(this.add.rectangle(W / 2, H / 2, PW, PH, 0x090910, 0.98)
@@ -1313,5 +1320,245 @@ export class UIScene extends Phaser.Scene {
     this.time.delayedCall(0, () => {
       this.input.keyboard.once('keydown-ESC', close);
     });
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  Portrait / Mobile HUD
+  // ══════════════════════════════════════════════════════════
+
+  _buildHUD_portrait(W, H) {
+    // ── Zone heights ─────────────────────────────────────────
+    const STATS_H  = 88;   // compact stats bar at top
+    const LOG_H    = 40;   // message log
+    const HOTBAR_H = 46;   // skill hotbar
+    const DPAD_H   = 106;  // d-pad + action buttons
+    const BOTTOM_H = LOG_H + HOTBAR_H + DPAD_H;
+
+    const LOG_Y    = H - BOTTOM_H;
+    const HOTBAR_Y = LOG_Y + LOG_H;
+    const DPAD_Y   = HOTBAR_Y + HOTBAR_H;
+
+    // ── Top Stats Panel ───────────────────────────────────────
+    const PX = 4, PY = 4, PW = W - 8, PH = STATS_H - 6;
+
+    this.statsBg = this.add.rectangle(PX + PW / 2, PY + PH / 2, PW, PH, 0x0d1117, 0.92)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(10);
+
+    const tx = (x, y, str, color = '#ccddee', size = 11) =>
+      this.add.text(x, y, str, {
+        fontFamily: 'Courier New', fontSize: `${size}px`, color,
+      }).setScrollFactor(0).setDepth(11);
+
+    // Title row
+    tx(PX + 6, PY + 4, '⚔ DARKSPAWN', '#ffd700', 12);
+    this.floorText = tx(W / 2, PY + 4, 'Floor: 1', '#88aacc', 11).setOrigin(0.5, 0);
+
+    // Pause button (top-right, compact)
+    const pauseBtn = this.add.text(W - 4, PY + 4, '[❚❚]', {
+      fontFamily: 'Courier New', fontSize: '11px', color: '#88aacc',
+      backgroundColor: '#0d1117', padding: { x: 4, y: 2 },
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(11).setInteractive({ useHandCursor: true });
+    pauseBtn.on('pointerover', () => pauseBtn.setColor('#ffd700'));
+    pauseBtn.on('pointerout',  () => pauseBtn.setColor('#88aacc'));
+    pauseBtn.on('pointerdown', () => this.bus.emit(EV.PAUSE_GAME));
+
+    // Bars: HP, MP, XP stacked vertically across full panel width
+    const barX = PX + 22, barW = PW - 26;
+    const barH = 9, xpH = 7;
+
+    tx(PX + 4, PY + 18, 'HP', '#ff6666', 10);
+    this.hpBarBg   = this.add.rectangle(barX, PY + 20, barW, barH, 0x330000).setScrollFactor(0).setDepth(11).setOrigin(0, 0);
+    this.hpBarFill = this.add.rectangle(barX, PY + 20, barW, barH, 0xdd3333).setScrollFactor(0).setDepth(12).setOrigin(0, 0);
+
+    tx(PX + 4, PY + 30, 'MP', '#6688ff', 10);
+    this.mpBarBg   = this.add.rectangle(barX, PY + 32, barW, barH, 0x000033).setScrollFactor(0).setDepth(11).setOrigin(0, 0);
+    this.mpBarFill = this.add.rectangle(barX, PY + 32, barW, barH, 0x3355dd).setScrollFactor(0).setDepth(12).setOrigin(0, 0);
+
+    tx(PX + 4, PY + 42, 'XP', '#44cc44', 10);
+    this.xpBarBg   = this.add.rectangle(barX, PY + 44, barW, xpH, 0x002200).setScrollFactor(0).setDepth(11).setOrigin(0, 0);
+    this.xpBarFill = this.add.rectangle(barX, PY + 44, barW, xpH, 0x33aa33).setScrollFactor(0).setDepth(12).setOrigin(0, 0);
+
+    // Text readouts line (HP | MP | LVL)
+    this.hpText   = tx(PX + 4,       PY + 53, 'HP:20/20',     '#ffaaaa', 9);
+    this.mpText   = tx(PX + 4 + 108, PY + 53, 'MP:10/10',     '#aaaaff', 9);
+    this.xpText   = tx(PX + 4 + 220, PY + 53, 'LVL 1 — 0 XP','#88cc88', 9);
+
+    // Stats row
+    this.atkText  = tx(PX + 4,       PY + 64, 'ATK:5',  '#ffaa44', 10);
+    this.defText  = tx(PX + 4 + 80,  PY + 64, 'DEF:2',  '#88ccff', 10);
+    this.spdText  = tx(PX + 4 + 154, PY + 64, 'SPD:4',  '#ffff88', 10);
+    this.goldText = tx(PX + 4 + 228, PY + 64, 'Gold:0', '#ffd700', 10);
+
+    // Controls hint (very small)
+    tx(PX + 4, PY + 76, 'Tap to walk · D-pad = move · [I]nv [K]ills [C]raft [P]char', '#334455', 8);
+
+    // ── Minimap (top-right, hidden by default on mobile) ─────
+    this._buildMinimap(W, STATS_H + 4);
+    this.mmVisible = false;
+    this.mmBg.setVisible(false);
+    this.mmLabel.setVisible(false);
+    this.mmGraphics.setVisible(false);
+
+    // ── Message Log ───────────────────────────────────────────
+    this.logBg = this.add.rectangle(W / 2, LOG_Y + LOG_H / 2, W - 4, LOG_H, 0x0d1117, 0.92)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(10);
+    this.logLines = [];
+    for (let i = 0; i < 2; i++) {
+      this.logLines.push(
+        this.add.text(6, LOG_Y + 5 + i * 17, '', {
+          fontFamily: 'Courier New', fontSize: '11px', color: '#778899',
+          wordWrap: { width: W - 12 },
+        }).setScrollFactor(0).setDepth(11)
+      );
+    }
+    this.logMessages = [];
+
+    // ── Skill Hotbar (compact, portrait) ─────────────────────
+    this._buildSkillHotbar_portrait(W, HOTBAR_Y, HOTBAR_H);
+
+    // ── D-Pad + Action buttons ────────────────────────────────
+    this._buildDPad(W, DPAD_Y, DPAD_H);
+
+    // ── UI blocker zones ──────────────────────────────────────
+    const uiBlock = (x, y, w, h) =>
+      this.add.zone(x + w / 2, y + h / 2, w, h)
+        .setScrollFactor(0).setDepth(9).setInteractive();
+    uiBlock(0, 0, W, STATS_H);       // top stats
+    uiBlock(0, LOG_Y, W, BOTTOM_H);  // bottom controls
+
+    // ── Drag system (kept for completeness) ──────────────────
+    this._initDragSystem();
+
+    // Portrait mode: no always-visible inventory or equipment panels
+    this._invSlots   = null;
+    this._equipSlots = null;
+    this._invTooltip = null;
+  }
+
+  _buildSkillHotbar_portrait(W, startY, height) {
+    const SZ = 34, GAP = 3;
+    const HB_Y = startY + Math.floor((height - SZ) / 2);
+    const maxSlots = 8;
+    const panelW = maxSlots * (SZ + GAP) - GAP + 12;
+
+    this.add.rectangle(W / 2, HB_Y + SZ / 2 + 2, panelW, SZ + 12, 0x0d1117, 0.88)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(10);
+    this.add.text(W / 2, HB_Y - 2, 'SKILLS', {
+      fontFamily: 'Courier New', fontSize: '9px', color: '#334466',
+    }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(10);
+
+    this._hotbarSZ         = SZ;
+    this._hotbarGAP        = GAP;
+    this._hotbarY          = HB_Y;
+    this._hotbarW          = W;
+    this._hotbarSkills     = [];
+    this._hotbarSlotObjects = [];
+    this._selectedSkillId  = null;
+    this._skillsBadge      = null;  // accessed via SKILLS action button instead
+
+    this._refreshSkillHotbar();
+  }
+
+  _buildDPad(W, startY, height) {
+    const SZ = 32, GAP = 2;     // d-pad button size and gap
+    const gridW = SZ * 3 + GAP * 2;
+    const gridH = SZ * 3 + GAP * 2;
+    const dpadX = 6;
+    const dpadY = startY + Math.floor((height - gridH) / 2);
+
+    // D-pad background
+    this.add.rectangle(dpadX + gridW / 2, dpadY + gridH / 2, gridW + 8, gridH + 8, 0x0d1117, 0.88)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(10);
+
+    const DIRS = [
+      { dx: -1, dy: -1, lbl: '↖', row: 0, col: 0 },
+      { dx:  0, dy: -1, lbl: '↑', row: 0, col: 1 },
+      { dx:  1, dy: -1, lbl: '↗', row: 0, col: 2 },
+      { dx: -1, dy:  0, lbl: '←', row: 1, col: 0 },
+      { dx:  0, dy:  0, lbl: '·', row: 1, col: 1 },  // centre = wait/action
+      { dx:  1, dy:  0, lbl: '→', row: 1, col: 2 },
+      { dx: -1, dy:  1, lbl: '↙', row: 2, col: 0 },
+      { dx:  0, dy:  1, lbl: '↓', row: 2, col: 1 },
+      { dx:  1, dy:  1, lbl: '↘', row: 2, col: 2 },
+    ];
+
+    for (const dir of DIRS) {
+      const bx = dpadX + dir.col * (SZ + GAP) + SZ / 2;
+      const by = dpadY + dir.row * (SZ + GAP) + SZ / 2;
+      const isCenter = dir.dx === 0 && dir.dy === 0;
+
+      const btnBg = this.add.rectangle(bx, by, SZ, SZ,
+        isCenter ? 0x1a1a2a : 0x161622, 1)
+        .setStrokeStyle(1, isCenter ? 0x556677 : 0x334466)
+        .setScrollFactor(0).setDepth(11).setInteractive({ useHandCursor: true });
+
+      this.add.text(bx, by, dir.lbl, {
+        fontFamily: 'Courier New', fontSize: '16px',
+        color: isCenter ? '#556677' : '#88aacc',
+      }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(12);
+
+      let holdEvent = null;
+      const doAction = () => {
+        const gs = this.scene.get(SCENE.GAME);
+        if (!gs || gs.gamePaused || gs.activePanel !== 0 || gs.targeting) return;
+        if (isCenter) {
+          gs._playerDefaultAction?.();
+        } else {
+          gs._playerMove(dir.dx, dir.dy);
+        }
+      };
+
+      const normalFill = isCenter ? 0x1a1a2a : 0x161622;
+      btnBg.on('pointerover', () => btnBg.setFillStyle(isCenter ? 0x252538 : 0x222233));
+      btnBg.on('pointerout', () => {
+        btnBg.setFillStyle(normalFill);
+        if (holdEvent) { holdEvent.remove(false); holdEvent = null; }
+      });
+      btnBg.on('pointerdown', () => {
+        btnBg.setFillStyle(0x334466);
+        doAction();
+        holdEvent = this.time.addEvent({ delay: 180, callback: doAction, loop: true });
+      });
+      btnBg.on('pointerup', () => {
+        btnBg.setFillStyle(normalFill);
+        if (holdEvent) { holdEvent.remove(false); holdEvent = null; }
+      });
+    }
+
+    // ── Action buttons (right of d-pad) ──────────────────────
+    const BTN_W = 78, BTN_H = 48, BTN_GAP = 3;
+    const actionStartX = dpadX + gridW + 10;
+    const rowsH = BTN_H * 2 + BTN_GAP;
+    const actionStartY = startY + Math.floor((height - rowsH) / 2);
+
+    const ACTIONS = [
+      { lbl: 'INV\n[I]',   col: 0, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(1); } },
+      { lbl: 'SKILL\n[K]', col: 1, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(2); } },
+      { lbl: 'CRAFT\n[C]', col: 2, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(3); } },
+      { lbl: 'CHAR\n[P]',  col: 3, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(4); } },
+      { lbl: 'GET\n[G]',   col: 0, row: 1, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused && gs.activePanel === 0) gs._playerPickUp?.(); } },
+      { lbl: 'WAIT\n[.]',  col: 1, row: 1, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused && gs.activePanel === 0) gs._endPlayerTurn?.(); } },
+      { lbl: 'MAP\n[M]',   col: 2, row: 1, action: () => this._toggleMinimap() },
+      { lbl: 'PAUSE',      col: 3, row: 1, action: () => this.bus.emit(EV.PAUSE_GAME) },
+    ];
+
+    for (const act of ACTIONS) {
+      const bx = actionStartX + act.col * (BTN_W + BTN_GAP) + BTN_W / 2;
+      const by = actionStartY + act.row * (BTN_H + BTN_GAP) + BTN_H / 2;
+
+      const bg = this.add.rectangle(bx, by, BTN_W, BTN_H, 0x111122, 1)
+        .setStrokeStyle(1, 0x334466)
+        .setScrollFactor(0).setDepth(11).setInteractive({ useHandCursor: true });
+
+      this.add.text(bx, by, act.lbl, {
+        fontFamily: 'Courier New', fontSize: '10px',
+        color: '#88aacc', align: 'center',
+      }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(12);
+
+      bg.on('pointerover', () => bg.setFillStyle(0x1a2233));
+      bg.on('pointerout',  () => bg.setFillStyle(0x111122));
+      bg.on('pointerdown', () => { bg.setFillStyle(0x334466); act.action(); });
+      bg.on('pointerup',   () => bg.setFillStyle(0x111122));
+    }
   }
 }

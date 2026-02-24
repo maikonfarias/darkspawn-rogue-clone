@@ -21,10 +21,16 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// Detect portrait / mobile — used by scenes to adapt their layouts
+const _ua = navigator.userAgent;
+const _isMobileUA = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(_ua);
+const _isPortraitWindow = window.innerHeight > window.innerWidth;
+window.PORTRAIT = _isMobileUA || _isPortraitWindow || window.innerWidth < 600;
+
 const config = {
   type: Phaser.AUTO,
-  width:  1024,
-  height: 700,
+  width:  window.PORTRAIT ? 480 : 1024,
+  height: window.PORTRAIT ? 854 : 700,
   backgroundColor: '#0a0a0f',
   parent: 'game-container',
   scene: [
@@ -39,6 +45,9 @@ const config = {
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
+  },
+  input: {
+    activePointers: 4,
   },
 };
 
