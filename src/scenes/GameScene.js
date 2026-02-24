@@ -1327,6 +1327,11 @@ export class GameScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
 
+    // Stop following so the manual setScroll below is not overridden by the
+    // lerp follow system on the next frame, which would cause a visible camera
+    // jump (the "map moves for a second" mobile bug).
+    cam.stopFollow();
+
     // Snap the camera to the player's exact centre so panel world-coordinates
     // map to stable screen positions.  Without this, a lerp-lagged camera
     // (camera still catching up after a move) causes the panel to drift left
@@ -1352,6 +1357,10 @@ export class GameScene extends Phaser.Scene {
   _closePanel() {
     this.activePanel = PANEL.NONE;
     if (this.overlayPanel) { this.overlayPanel.destroy(); this.overlayPanel = null; }
+    // Resume camera follow now that the panel is closed
+    if (this.playerSprite) {
+      this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
+    }
     // Prevent the same click from immediately triggering click-to-walk
     this._panelJustClosed = true;
     this.time.delayedCall(80, () => { this._panelJustClosed = false; });
@@ -1402,6 +1411,7 @@ export class GameScene extends Phaser.Scene {
     const COLS = window.PORTRAIT ? 4 : 6;
     const startX = bx + Math.round(12 * sf), startY = by + Math.round(40 * sf);
     this._selectedSlot = -1;
+    this._selectedEquipSlot = null;
     this._invDetailText = null;
 
     // Equipment section
@@ -1427,7 +1437,25 @@ export class GameScene extends Phaser.Scene {
         panel.add(box);
       }
       box.on('pointerdown', () => {
-        if (item) { SFX.play('equip'); this.player.unequipItem(eq.slot); this._openPanel(PANEL.INVENTORY); }
+        if (!item) return;
+        if (this._selectedEquipSlot === eq.slot) {
+          // Second click: unequip
+          SFX.play('equip');
+          this.player.unequipItem(eq.slot);
+          this._openPanel(PANEL.INVENTORY);
+        } else {
+          // First click: show item details
+          this._selectedEquipSlot = eq.slot;
+          this._selectedSlot = -1;  // clear any bag selection
+          let detail = `${item.name}\n\n${item.description ?? ''}\n\n`;
+          if (item.atk)      detail += `ATK: +${item.atk}\n`;
+          if (item.def)      detail += `DEF: +${item.def}\n`;
+          if (item.hpBonus)  detail += `HP: +${item.hpBonus}\n`;
+          if (item.manaBonus) detail += `MP: +${item.manaBonus}\n`;
+          if (item.value)    detail += `\nValue: ${item.value}g`;
+          detail += '\n\n[Click again to unequip]';
+          if (this._invDetailText) this._invDetailText.setText(detail).setColor('#ccddee');
+        }
       });
     }
 
@@ -1471,8 +1499,11 @@ export class GameScene extends Phaser.Scene {
     const item = this.player.inventory[i];
     if (!item) return;
 
+    // Clear any equipment selection
+    this._selectedEquipSlot = null;
+
     // Show detail
-    let detail = `${item.name}\n\n${item.description}\n\n`;
+    let detail = `${item.name}\n\n${item.description ?? ''}\n\n`;
     if (item.atk)  detail += `ATK: +${item.atk}\n`;
     if (item.def)  detail += `DEF: +${item.def}\n`;
     if (item.hpBonus)   detail += `HP: +${item.hpBonus}\n`;
