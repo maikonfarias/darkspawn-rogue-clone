@@ -1390,7 +1390,7 @@ export class UIScene extends Phaser.Scene {
     this.goldText = tx(PX + 4 + 228, PY + 64, 'Gold:0', '#ffd700', 10);
 
     // Controls hint (very small)
-    tx(PX + 4, PY + 76, 'Tap to walk · D-pad = move · [I]nv [K]ills [C]raft [P]har', '#334455', 8);
+    tx(PX + 4, PY + 76, 'Tap to walk · D-pad = move · [I]nv [K]ills [C]raft [P]char', '#334455', 8);
 
     // ── Minimap (top-right, hidden by default on mobile) ─────
     this._buildMinimap(W, STATS_H + 4);

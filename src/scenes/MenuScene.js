@@ -153,6 +153,16 @@ export class MenuScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Create a clickable button text object.
+   * @param {number} x - Horizontal centre position.
+   * @param {number} y - Vertical centre position.
+   * @param {string} label - Button label text.
+   * @param {string} textColor - Label colour hex string.
+   * @param {string} bgColor - Background colour hex string.
+   * @param {string|function} fontSize - CSS font-size string, or callback for 5-arg legacy call.
+   * @param {function} [callback] - Click / Enter handler.
+   */
   _makeButton(x, y, label, textColor, bgColor, fontSize, callback) {
     // Support old 5-arg signature (no fontSize)
     if (typeof fontSize === 'function') { callback = fontSize; fontSize = '20px'; }

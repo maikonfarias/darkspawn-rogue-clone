@@ -1374,12 +1374,12 @@ export class GameScene extends Phaser.Scene {
 
     // Equipment section
     this._addText(panel, bx + 12*sf, by + 38*sf, '── Equipment ──', '#888899', 12);
-    const eqGap = 58;
+    const eqGap = Math.round(58 * sf);
     const eqSlots = [
-      { label: 'WPN', slot: 'weapon', x: bx + 12*sf,               y: by + 52*sf },
-      { label: 'ARM', slot: 'armor',  x: bx + (12 + eqGap)*sf,     y: by + 52*sf },
-      { label: 'RNG', slot: 'ring',   x: bx + (12 + eqGap*2)*sf,   y: by + 52*sf },
-      { label: 'AMU', slot: 'amulet', x: bx + (12 + eqGap*3)*sf,   y: by + 52*sf },
+      { label: 'WPN', slot: 'weapon', x: bx + 12*sf,                     y: by + 52*sf },
+      { label: 'ARM', slot: 'armor',  x: bx + 12*sf + eqGap,             y: by + 52*sf },
+      { label: 'RNG', slot: 'ring',   x: bx + 12*sf + eqGap * 2,         y: by + 52*sf },
+      { label: 'AMU', slot: 'amulet', x: bx + 12*sf + eqGap * 3,         y: by + 52*sf },
     ];
     for (const eq of eqSlots) {
       const item = this.player.equipment[eq.slot];
