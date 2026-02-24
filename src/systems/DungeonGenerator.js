@@ -1,7 +1,7 @@
 // ============================================================
 //  Darkspawn Rogue Quest — BSP Dungeon Generator
 // ============================================================
-import { TILE, MAP_W, MAP_H, DUNGEON_CFG } from '../data/Constants.js';
+import { TILE, MAP_W, MAP_H, DUNGEON_CFG, DIR4 } from '../data/Constants.js';
 import { rand, chance, pick, shuffle } from '../utils/Random.js';
 
 const { MIN_ROOM_W, MIN_ROOM_H, MAX_ROOM_W, MAX_ROOM_H, BSP_MIN_SIZE } = DUNGEON_CFG;
@@ -128,6 +128,21 @@ function connectBSP(grid, node) {
   if (r1 && r2) connectRooms(grid, r1, r2);
 }
 
+// Remove doors that don't have at least 2 open tiles among the 4 direct neighbours
+function pruneInvalidDoors(grid) {
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      if (grid[y][x] !== TILE.DOOR) continue;
+      let open = 0;
+      for (const { dx, dy } of DIR4) {
+        const nx = x + dx, ny = y + dy;
+        if (inBounds(nx, ny) && grid[ny][nx] !== TILE.WALL && grid[ny][nx] !== TILE.VOID) open++;
+      }
+      if (open < 2) grid[y][x] = TILE.FLOOR;
+    }
+  }
+}
+
 // Center of a room
 function center(room) {
   return { x: Math.floor(room.x + room.w / 2), y: Math.floor(room.y + room.h / 2) };
@@ -165,6 +180,9 @@ export function generateDungeon(floor) {
   const rooms = root.getAllRooms();
   // Carve all rooms into grid
   for (const r of rooms) carveRoom(grid, r);
+
+  // Remove doors that are not properly positioned (need ≥2 open neighbours)
+  pruneInvalidDoors(grid);
 
   // Shuffle rooms for random start/end
   const shuffled = shuffle([...rooms]);
