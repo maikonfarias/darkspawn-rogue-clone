@@ -161,13 +161,14 @@ export class GameScene extends Phaser.Scene {
     // Camera follow player
     // Camera follow player — extend bounds by half the viewport on every side
     // so the camera can always keep the player perfectly centred even at map edges
-    const camW = this.cameras.main.width;
-    const camH = this.cameras.main.height;
+    const zoom  = window.PORTRAIT ? 1.5 : 1;
+    const camW = Math.ceil(this.cameras.main.width  / zoom);
+    const camH = Math.ceil(this.cameras.main.height / zoom);
     const hW   = Math.ceil(camW / 2);
     const hH   = Math.ceil(camH / 2);
     this.cameras.main.setBounds(-hW, -hH, MAP_W * T + hW * 2, MAP_H * T + hH * 2);
     this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
-    this.cameras.main.setZoom(1);
+    this.cameras.main.setZoom(zoom);
 
     // Emit initial state
     this.events_bus.emit(EV.FLOOR_CHANGED, { floor: floorNum });
@@ -1337,54 +1338,58 @@ export class GameScene extends Phaser.Scene {
   }
 
   _panelBase(W, H, title) {
-    const PW = 580, PH = 440;
-    const px = cam => cam.scrollX + (W - PW) / 2;
-    const py = cam => cam.scrollY + (H - PH) / 2;
-    const cam = this.cameras.main;
-    const bx = cam.scrollX + (W - PW) / 2;
-    const by = cam.scrollY + (H - PH) / 2;
+    const cam  = this.cameras.main;
+    const zoom = cam.zoom;
+    const sf   = 1 / zoom;  // world-units per screen-pixel
+    const PW   = Math.round(Math.min(560, W - 20) * sf);
+    const PH   = Math.round(Math.min(440, H - 60) * sf);
+    const bx   = cam.scrollX + (W * sf - PW) / 2;
+    const by   = cam.scrollY + (H * sf - PH) / 2;
+    this._panelSf = sf;
 
     this.overlayPanel = this.add.container(0, 0).setDepth(30);
 
     const bg = this.add.rectangle(bx + PW / 2, by + PH / 2, PW, PH, 0x0d1117, 0.97)
-      .setStrokeStyle(2, 0x334466);
-    const titleTxt = this.add.text(bx + 12, by + 10, title, {
-      fontFamily: 'Courier New', fontSize: '18px', color: '#ffd700'
+      .setStrokeStyle(Math.max(1, Math.round(2 * sf)), 0x334466);
+    const titleTxt = this.add.text(bx + Math.round(12 * sf), by + Math.round(10 * sf), title, {
+      fontFamily: 'Courier New', fontSize: `${Math.round(18 * sf)}px`, color: '#ffd700'
     });
-    const closeTxt = this.add.text(bx + PW - 12, by + 10, '[ESC]', {
-      fontFamily: 'Courier New', fontSize: '14px', color: '#556677'
+    const closeTxt = this.add.text(bx + PW - Math.round(12 * sf), by + Math.round(10 * sf), '[ESC]', {
+      fontFamily: 'Courier New', fontSize: `${Math.round(14 * sf)}px`, color: '#556677'
     }).setOrigin(1, 0).setInteractive().on('pointerdown', () => this._closePanel());
 
     this.overlayPanel.add([bg, titleTxt, closeTxt]);
-    return { bx, by, PW, PH, panel: this.overlayPanel };
+    return { bx, by, PW, PH, sf, panel: this.overlayPanel };
   }
 
   // ── Inventory Panel ──────────────────────────────────────
 
   _renderInventoryPanel(W, H) {
-    const { bx, by, PW, PH, panel } = this._panelBase(W, H, '⚔ INVENTORY');
-    const COLS = 6, SLOT_SIZE = 44, GAP = 4;
-    const startX = bx + 12, startY = by + 40;
+    const { bx, by, PW, PH, sf, panel } = this._panelBase(W, H, '⚔ INVENTORY');
+    const SZ   = Math.round(44 * sf), GAP = Math.round(4 * sf);
+    const COLS = window.PORTRAIT ? 4 : 6;
+    const startX = bx + Math.round(12 * sf), startY = by + Math.round(40 * sf);
     this._selectedSlot = -1;
     this._invDetailText = null;
 
     // Equipment section
-    this._addText(panel, bx + 12, by + 38, '── Equipment ──', '#888899', 12);
+    this._addText(panel, bx + 12*sf, by + 38*sf, '── Equipment ──', '#888899', 12);
+    const eqGap = 58;
     const eqSlots = [
-      { label: 'WPN', slot: 'weapon', x: bx + 12, y: by + 52 },
-      { label: 'ARM', slot: 'armor',  x: bx + 70, y: by + 52 },
-      { label: 'RNG', slot: 'ring',   x: bx + 128, y: by + 52 },
-      { label: 'AMU', slot: 'amulet', x: bx + 186, y: by + 52 },
+      { label: 'WPN', slot: 'weapon', x: bx + 12*sf,               y: by + 52*sf },
+      { label: 'ARM', slot: 'armor',  x: bx + (12 + eqGap)*sf,     y: by + 52*sf },
+      { label: 'RNG', slot: 'ring',   x: bx + (12 + eqGap*2)*sf,   y: by + 52*sf },
+      { label: 'AMU', slot: 'amulet', x: bx + (12 + eqGap*3)*sf,   y: by + 52*sf },
     ];
     for (const eq of eqSlots) {
       const item = this.player.equipment[eq.slot];
       const clr = item ? 0x334466 : 0x1a1a2a;
-      const box = this.add.rectangle(eq.x + SLOT_SIZE / 2, eq.y + SLOT_SIZE / 2, SLOT_SIZE, SLOT_SIZE, clr)
-        .setStrokeStyle(1, 0x445577).setInteractive();
-      this._addText(panel, eq.x + 2, eq.y + 2, eq.label, '#445566', 9);
+      const box = this.add.rectangle(eq.x + SZ / 2, eq.y + SZ / 2, SZ, SZ, clr)
+        .setStrokeStyle(Math.max(1, sf), 0x445577).setInteractive();
+      this._addText(panel, eq.x + 2*sf, eq.y + 2*sf, eq.label, '#445566', 9);
       if (item) {
-        const icon = this.add.image(eq.x + SLOT_SIZE / 2, eq.y + SLOT_SIZE / 2, `item-${item.id ?? item.type}`)
-          .setScale(0.9);
+        const icon = this.add.image(eq.x + SZ / 2, eq.y + SZ / 2, `item-${item.id ?? item.type}`)
+          .setScale(0.9 * sf);
         panel.add([box, icon]);
       } else {
         panel.add(box);
@@ -1395,39 +1400,42 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Inventory grid
-    this._addText(panel, bx + 12, by + 105, '── Bag (click to use/equip) ──', '#888899', 12);
+    this._addText(panel, bx + 12*sf, by + 105*sf, '── Bag (click to use/equip) ──', '#888899', 12);
     for (let i = 0; i < 24; i++) {
       const col = i % COLS, row = Math.floor(i / COLS);
-      const ix = startX + col * (SLOT_SIZE + GAP);
-      const iy = by + 120 + row * (SLOT_SIZE + GAP);
+      const ix = startX + col * (SZ + GAP);
+      const iy = by + 120*sf + row * (SZ + GAP);
       const item = this.player.inventory[i];
       const clr = item ? 0x1e2a3a : 0x111118;
-      const box = this.add.rectangle(ix + SLOT_SIZE / 2, iy + SLOT_SIZE / 2, SLOT_SIZE, SLOT_SIZE, clr)
-        .setStrokeStyle(1, 0x334455).setInteractive();
+      const box = this.add.rectangle(ix + SZ / 2, iy + SZ / 2, SZ, SZ, clr)
+        .setStrokeStyle(Math.max(1, sf), 0x334455).setInteractive();
       panel.add(box);
       if (item) {
-        const icon = this.add.image(ix + SLOT_SIZE / 2, iy + SLOT_SIZE / 2 - 6, `item-${item.id ?? item.type}`)
-          .setScale(0.75);
-        const qtyTxt = this.add.text(ix + SLOT_SIZE - 4, iy + SLOT_SIZE - 14,
+        const icon = this.add.image(ix + SZ / 2, iy + SZ / 2 - 6*sf, `item-${item.id ?? item.type}`)
+          .setScale(0.75 * sf);
+        const qtyTxt = this.add.text(ix + SZ - 4*sf, iy + SZ - 14*sf,
           item.qty > 1 ? String(item.qty) : '', {
-            fontFamily: 'Courier New', fontSize: '10px', color: '#aaaacc'
+            fontFamily: 'Courier New', fontSize: `${Math.round(10 * sf)}px`, color: '#aaaacc'
           }).setOrigin(1, 0);
         panel.add([icon, qtyTxt]);
-        box.on('pointerdown', () => this._onInventorySlotClick(i, bx, by, PW, PH, panel));
+        box.on('pointerdown', () => this._onInventorySlotClick(i, bx, by, PW, PH, panel, sf));
         box.on('pointerover', () => box.setFillColor(0x2a3a4a));
         box.on('pointerout',  () => box.setFillColor(clr));
       }
     }
 
-    // Detail panel on right
-    this._invDetailText = this.add.text(bx + COLS * (SLOT_SIZE + GAP) + 20, by + 120, 'Select an item', {
-      fontFamily: 'Courier New', fontSize: '13px', color: '#778899',
-      wordWrap: { width: 160 }, lineSpacing: 4
-    });
-    panel.add(this._invDetailText);
+    // Detail panel on right (only if space available)
+    const detailX = startX + COLS * (SZ + GAP) + 20*sf;
+    if (detailX < bx + PW - 10*sf) {
+      this._invDetailText = this.add.text(detailX, by + 120*sf, 'Select an item', {
+        fontFamily: 'Courier New', fontSize: `${Math.round(13 * sf)}px`, color: '#778899',
+        wordWrap: { width: Math.round(160 * sf) }, lineSpacing: 4
+      });
+      panel.add(this._invDetailText);
+    }
   }
 
-  _onInventorySlotClick(i, bx, by, PW, PH, panel) {
+  _onInventorySlotClick(i, bx, by, PW, PH, panel, sf = 1) {
     const item = this.player.inventory[i];
     if (!item) return;
 
@@ -1441,10 +1449,10 @@ export class GameScene extends Phaser.Scene {
     detail += `\n\n[Click again to use/equip]`;
 
     if (this._invDetailText) {
-      const COLS = 6, SLOT_SIZE = 44, GAP = 4;
-      this._invDetailText.setPosition(
-        bx + COLS * (SLOT_SIZE + GAP) + 20, by + 120
-      ).setText(detail).setColor('#ccddee');
+      const COLS = window.PORTRAIT ? 4 : 6;
+      const SZ = Math.round(44 * sf), GAP = Math.round(4 * sf);
+      const detailX = bx + 12*sf + COLS * (SZ + GAP) + 20*sf;
+      this._invDetailText.setPosition(detailX, by + 120*sf).setText(detail).setColor('#ccddee');
     }
 
     if (this._selectedSlot === i) {
@@ -1482,21 +1490,22 @@ export class GameScene extends Phaser.Scene {
   // ── Skills Panel ─────────────────────────────────────────
 
   _renderSkillsPanel(W, H) {
-    const { bx, by, PW, PH, panel } = this._panelBase(W, H, '✦ SKILLS');
-    this._addText(panel, bx + PW - 12, by + 38, `Points: ${this.player.skillPoints}`, '#ffd700', 14)
+    const { bx, by, PW, PH, sf, panel } = this._panelBase(W, H, '✦ SKILLS');
+    this._addText(panel, bx + PW - 12*sf, by + 38*sf, `Points: ${this.player.skillPoints}`, '#ffd700', 14)
       .setOrigin(1, 0);
 
     const trees = Object.values(SKILL_TREES);
-    const colW = (PW - 24) / trees.length;
+    const colW = (PW - 24*sf) / trees.length;
 
     trees.forEach((tree, ti) => {
-      const cx = bx + 12 + ti * colW;
+      const cx = bx + 12*sf + ti * colW;
       // Tree header
-      this._addText(panel, cx + colW / 2, by + 55, tree.icon + ' ' + tree.name, tree.color, 15)
+      this._addText(panel, cx + colW / 2, by + 55*sf, tree.icon + ' ' + tree.name, tree.color, 15)
         .setOrigin(0.5, 0);
 
       tree.skills.forEach((skill, si) => {
-        const sy = by + 85 + si * 68;
+        const cardH = Math.round(68 * sf);
+        const sy = by + 85*sf + si * cardH;
         const unlocked = this.player.skills.has(skill.id);
         const canUnlockSkill = !unlocked && this.player.skillPoints > 0 &&
           (!skill.prereq || this.player.skills.has(skill.prereq));
@@ -1509,34 +1518,35 @@ export class GameScene extends Phaser.Scene {
           }
         };
 
-        const bg = this.add.rectangle(cx + colW / 2, sy + 25, colW - 8, 60,
+        const bg = this.add.rectangle(cx + colW / 2, sy + Math.round(25 * sf), colW - 8*sf, Math.round(60 * sf),
           unlocked ? 0x1a2a1a : canUnlockSkill ? 0x1a1a2a : 0x111118)
-          .setStrokeStyle(1, unlocked ? 0x44aa44 : canUnlockSkill ? 0x334466 : 0x222233)
+          .setStrokeStyle(Math.max(1, sf), unlocked ? 0x44aa44 : canUnlockSkill ? 0x334466 : 0x222233)
           .setInteractive();
         if (canUnlockSkill) bg.on('pointerdown', tryUnlock);
         panel.add(bg);
 
         // Skill icon
-        const icon = this.add.image(cx + 16, sy + 12, `skill-${skill.id}`)
-          .setDisplaySize(22, 22);
+        const iconSz = Math.round(22 * sf);
+        const icon = this.add.image(cx + 16*sf, sy + 12*sf, `skill-${skill.id}`)
+          .setDisplaySize(iconSz, iconSz);
         if (!unlocked) icon.setTint(0x444466);
         panel.add(icon);
 
         const nameClr = unlocked ? '#88ff88' : canUnlockSkill ? '#88aacc' : '#445566';
-        this._addText(panel, cx + 32, sy + 3, skill.name, nameClr, 11);
+        this._addText(panel, cx + 32*sf, sy + 3*sf, skill.name, nameClr, 11);
 
         // Type tag: Active (cost) or Passive
         const isActive = !!skill.active;
         const typeStr = isActive ? `[Active ${skill.active.cost}mp]` : '[Passive]';
-        this._addText(panel, cx + 32, sy + 15, typeStr, isActive ? '#5566aa' : '#446644', 9);
+        this._addText(panel, cx + 32*sf, sy + 15*sf, typeStr, isActive ? '#5566aa' : '#446644', 9);
 
         // Description spanning full card width below the icon row
-        this._addText(panel, cx + 4, sy + 30, skill.description, '#667788', 9, colW - 12);
+        this._addText(panel, cx + 4*sf, sy + 30*sf, skill.description, '#667788', 9, colW - 12*sf);
 
         if (unlocked) {
-          this._addText(panel, cx + colW - 6, sy + 50, '✓', '#44ff44', 11).setOrigin(1, 0);
+          this._addText(panel, cx + colW - 6*sf, sy + 50*sf, '✓', '#44ff44', 11).setOrigin(1, 0);
         } else if (canUnlockSkill) {
-          const btn = this._addText(panel, cx + colW - 6, sy + 48, '[UNLOCK]', '#ffd700', 11).setOrigin(1, 0)
+          const btn = this._addText(panel, cx + colW - 6*sf, sy + 48*sf, '[UNLOCK]', '#ffd700', 11).setOrigin(1, 0)
             .setInteractive();
           btn.on('pointerdown', tryUnlock);
           panel.add(btn);
@@ -1548,8 +1558,8 @@ export class GameScene extends Phaser.Scene {
   // ── Crafting Panel ────────────────────────────────────────
 
   _renderCraftingPanel(W, H) {
-    const { bx, by, PW, PH, panel } = this._panelBase(W, H, '⚒ CRAFTING');
-    this._addText(panel, bx + 12, by + 38, 'Materials in inventory:', '#778899', 12);
+    const { bx, by, PW, PH, sf, panel } = this._panelBase(W, H, '⚒ CRAFTING');
+    this._addText(panel, bx + 12*sf, by + 38*sf, 'Materials in inventory:', '#778899', 12);
 
     // Show materials
     const matCounts = {};
@@ -1560,28 +1570,29 @@ export class GameScene extends Phaser.Scene {
     }
     const matStr = Object.entries(matCounts).map(([id, qty]) =>
       `${ITEMS[id]?.name ?? id}: ${qty}`).join('  ');
-    this._addText(panel, bx + 12, by + 52, matStr || 'None', '#aabbcc', 11, PW - 24);
+    this._addText(panel, bx + 12*sf, by + 52*sf, matStr || 'None', '#aabbcc', 11, PW - 24*sf);
 
     // Recipes
     const recipes = getAvailableRecipes(this.player);
-    this._addText(panel, bx + 12, by + 72, '── Recipes ──', '#888899', 12);
+    this._addText(panel, bx + 12*sf, by + 72*sf, '── Recipes ──', '#888899', 12);
 
+    const rowH = Math.round(34 * sf);
     recipes.forEach((recipe, i) => {
-      const ry = by + 88 + i * 34;
-      if (ry + 32 > by + PH - 10) return; // overflow guard
+      const ry = by + 88*sf + i * rowH;
+      if (ry + Math.round(32 * sf) > by + PH - 10*sf) return; // overflow guard
 
       const clr = recipe.canCraft ? 0x1a2a1a : 0x111118;
-      const bg = this.add.rectangle(bx + PW / 2, ry + 15, PW - 24, 30, clr)
-        .setStrokeStyle(1, recipe.canCraft ? 0x44aa44 : 0x222233).setInteractive();
+      const bg = this.add.rectangle(bx + PW / 2, ry + Math.round(15 * sf), PW - 24*sf, Math.round(30 * sf), clr)
+        .setStrokeStyle(Math.max(1, sf), recipe.canCraft ? 0x44aa44 : 0x222233).setInteractive();
       panel.add(bg);
 
       const ingStr = recipe.ingredients.map(ing => `${ITEMS[ing.id]?.name ?? ing.id}×${ing.qty}`).join(', ');
       const resStr = `→ ${ITEMS[recipe.result.id]?.name ?? recipe.result.id}`;
-      this._addText(panel, bx + 16, ry + 4, recipe.name, recipe.canCraft ? '#88ff88' : '#556677', 12);
-      this._addText(panel, bx + 16, ry + 18, ingStr + '  ' + resStr, '#667788', 10, PW - 120);
+      this._addText(panel, bx + 16*sf, ry + 4*sf, recipe.name, recipe.canCraft ? '#88ff88' : '#556677', 12);
+      this._addText(panel, bx + 16*sf, ry + 18*sf, ingStr + '  ' + resStr, '#667788', 10, PW - 120*sf);
 
       if (recipe.canCraft) {
-        const btn = this._addText(panel, bx + PW - 16, ry + 10, '[CRAFT]', '#ffd700', 13).setOrigin(1, 0.5)
+        const btn = this._addText(panel, bx + PW - 16*sf, ry + 10*sf, '[CRAFT]', '#ffd700', 13).setOrigin(1, 0.5)
           .setInteractive();
         btn.on('pointerdown', () => {
           const result = craftItem(this.player, recipe.id);
@@ -1597,7 +1608,7 @@ export class GameScene extends Phaser.Scene {
   // ── Character Panel ───────────────────────────────────────
 
   _renderCharPanel(W, H) {
-    const { bx, by, PW, PH, panel } = this._panelBase(W, H, '⚙ CHARACTER');
+    const { bx, by, PW, PH, sf, panel } = this._panelBase(W, H, '⚙ CHARACTER');
     const p = this.player;
     const lines = [
       `Name:     ${p.name}`,
@@ -1626,19 +1637,20 @@ export class GameScene extends Phaser.Scene {
         ? p.statusEffects.map(e => `${e.type}(${e.duration})`).join(', ')
         : 'None',
     ];
-    this._addText(panel, bx + 24, by + 40, lines.join('\n'), '#ccddee', 13, PW - 48)
-      .setLineSpacing(5);
+    this._addText(panel, bx + 24*sf, by + 40*sf, lines.join('\n'), '#ccddee', 13, PW - 48*sf)
+      .setLineSpacing(Math.round(5 * sf));
   }
 
   // ── Helpers ───────────────────────────────────────────────
 
   _addText(panel, x, y, str, color = '#ccddee', size = 13, wrapWidth = 0) {
+    const sf = this._panelSf ?? 1;
     const cfg = {
       fontFamily: 'Courier New, monospace',
-      fontSize: `${size}px`,
+      fontSize: `${Math.round(size * sf)}px`,
       color: String(color),
     };
-    if (wrapWidth) cfg.wordWrap = { width: wrapWidth };
+    if (wrapWidth) cfg.wordWrap = { width: Math.round(wrapWidth * sf) };
     const t = this.add.text(x, y, str, cfg);
     if (panel) panel.add(t);
     return t;
