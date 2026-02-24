@@ -1497,10 +1497,19 @@ export class GameScene extends Phaser.Scene {
         const canUnlockSkill = !unlocked && this.player.skillPoints > 0 &&
           (!skill.prereq || this.player.skills.has(skill.prereq));
 
+        const tryUnlock = () => {
+          if (unlockSkill(this.player, skill.id)) {
+            this.events_bus.emit(EV.LOG_MSG, { text: `Unlocked: ${skill.name}!`, color: '#ffd700' });
+            this.events_bus.emit(EV.STATS_CHANGED); // refresh skill hotbar immediately
+            this._openPanel(PANEL.SKILLS);
+          }
+        };
+
         const bg = this.add.rectangle(cx + colW / 2, sy + 25, colW - 8, 60,
           unlocked ? 0x1a2a1a : canUnlockSkill ? 0x1a1a2a : 0x111118)
           .setStrokeStyle(1, unlocked ? 0x44aa44 : canUnlockSkill ? 0x334466 : 0x222233)
           .setInteractive();
+        if (canUnlockSkill) bg.on('pointerdown', tryUnlock);
         panel.add(bg);
 
         // Skill icon
@@ -1525,13 +1534,7 @@ export class GameScene extends Phaser.Scene {
         } else if (canUnlockSkill) {
           const btn = this._addText(panel, cx + colW - 6, sy + 48, '[UNLOCK]', '#ffd700', 11).setOrigin(1, 0)
             .setInteractive();
-          btn.on('pointerdown', () => {
-            if (unlockSkill(this.player, skill.id)) {
-              this.events_bus.emit(EV.LOG_MSG, { text: `Unlocked: ${skill.name}!`, color: '#ffd700' });
-              this.events_bus.emit(EV.STATS_CHANGED); // refresh skill hotbar immediately
-              this._openPanel(PANEL.SKILLS);
-            }
-          });
+          btn.on('pointerdown', tryUnlock);
           panel.add(btn);
         }
       });
