@@ -23,9 +23,8 @@ const MM_H    = MAP_H * MM_SCALE;  // 100
 // Portrait HUD zone heights – must match _buildHUD_portrait definitions
 const PORTRAIT_STATS_H  = 88;                          // top stats bar
 const PORTRAIT_LOG_H    = 40;
-const PORTRAIT_HOTBAR_H = 46;
-const PORTRAIT_DPAD_H   = 106;
-const PORTRAIT_BOTTOM_H = PORTRAIT_LOG_H + PORTRAIT_HOTBAR_H + PORTRAIT_DPAD_H; // 192
+const PORTRAIT_DPAD_H   = 140;  // skill hotbar (40px) + d-pad/button area (100px)
+const PORTRAIT_BOTTOM_H = PORTRAIT_LOG_H + PORTRAIT_DPAD_H; // 180
 
 export class UIScene extends Phaser.Scene {
   constructor() { super({ key: SCENE.UI }); }
@@ -1353,13 +1352,11 @@ export class UIScene extends Phaser.Scene {
     // ── Zone heights ─────────────────────────────────────────
     const STATS_H  = PORTRAIT_STATS_H;   // compact stats bar at top
     const LOG_H    = PORTRAIT_LOG_H;     // message log
-    const HOTBAR_H = PORTRAIT_HOTBAR_H;  // skill hotbar
-    const DPAD_H   = PORTRAIT_DPAD_H;    // d-pad + action buttons
+    const DPAD_H   = PORTRAIT_DPAD_H;    // skill hotbar + d-pad + action buttons
     const BOTTOM_H = PORTRAIT_BOTTOM_H;
 
-    const LOG_Y    = H - BOTTOM_H;
-    const HOTBAR_Y = LOG_Y + LOG_H;
-    const DPAD_Y   = HOTBAR_Y + HOTBAR_H;
+    const LOG_Y  = H - BOTTOM_H;
+    const DPAD_Y = LOG_Y + LOG_H;
 
     // ── Top Stats Panel ───────────────────────────────────────
     const PX = 4, PY = 4, PW = W - 8, PH = STATS_H - 6;
@@ -1376,14 +1373,24 @@ export class UIScene extends Phaser.Scene {
     tx(PX + 6, PY + 4, '⚔ DARKSPAWN', '#ffd700', 12);
     this.floorText = tx(W / 2, PY + 4, 'Floor: 1', '#88aacc', 11).setOrigin(0.5, 0);
 
-    // Pause button (top-right, compact)
-    const pauseBtn = this.add.text(W - 4, PY + 4, '[❚❚]', {
-      fontFamily: 'Courier New', fontSize: '11px', color: '#88aacc',
-      backgroundColor: '#0d1117', padding: { x: 4, y: 2 },
+    // Pause button (top-right, larger and more tappable on mobile)
+    const pauseBtn = this.add.text(W - 4, PY + 4, '❚❚', {
+      fontFamily: 'Courier New', fontSize: '16px', color: '#88aacc',
+      backgroundColor: '#1a1a2a', padding: { x: 10, y: 6 },
     }).setOrigin(1, 0).setScrollFactor(0).setDepth(11).setInteractive({ useHandCursor: true });
     pauseBtn.on('pointerover', () => pauseBtn.setColor('#ffd700'));
     pauseBtn.on('pointerout',  () => pauseBtn.setColor('#88aacc'));
     pauseBtn.on('pointerdown', () => this.bus.emit(EV.PAUSE_GAME));
+
+    // Map button (below pause button, top-right)
+    // Y: pauseBtn top (PY+4) + font height (16) + total vertical padding (6*2=12) + gap (4)
+    const mapBtn = this.add.text(W - 4, PY + 4 + 16 + 12 + 4, 'MAP', {
+      fontFamily: 'Courier New', fontSize: '13px', color: '#88aacc',
+      backgroundColor: '#1a1a2a', padding: { x: 10, y: 5 },
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(11).setInteractive({ useHandCursor: true });
+    mapBtn.on('pointerover', () => mapBtn.setColor('#ffd700'));
+    mapBtn.on('pointerout',  () => mapBtn.setColor('#88aacc'));
+    mapBtn.on('pointerdown', () => this._toggleMinimap());
 
     // Bars: HP, MP, XP stacked vertically across full panel width
     const barX = PX + 22, barW = PW - 26;
@@ -1433,10 +1440,7 @@ export class UIScene extends Phaser.Scene {
     }
     this.logMessages = [];
 
-    // ── Skill Hotbar (compact, portrait) ─────────────────────
-    this._buildSkillHotbar_portrait(W, HOTBAR_Y, HOTBAR_H);
-
-    // ── D-Pad + Action buttons ────────────────────────────────
+    // ── Skill Hotbar + D-Pad + Action buttons ─────────────────
     this._buildDPad(W, DPAD_Y, DPAD_H);
 
     // ── UI blocker zones ──────────────────────────────────────
@@ -1482,11 +1486,19 @@ export class UIScene extends Phaser.Scene {
   }
 
   _buildDPad(W, startY, height) {
+    // ── Skill Hotbar (top 40px of the DPAD zone) ──────────────
+    const HOTBAR_PORTION = 40;
+    this._buildSkillHotbar_portrait(W, startY, HOTBAR_PORTION);
+
+    // ── D-pad + 4 action buttons (remaining 100px below hotbar) ─
+    const dpadStartY = startY + HOTBAR_PORTION;
+    const dpadHeight = height - HOTBAR_PORTION; // 100
+
     const SZ = 32, GAP = 2;     // d-pad button size and gap
     const gridW = SZ * 3 + GAP * 2;
     const gridH = SZ * 3 + GAP * 2;
     const dpadX = 6;
-    const dpadY = startY + Math.floor((height - gridH) / 2);
+    const dpadY = dpadStartY + Math.floor((dpadHeight - gridH) / 2);
 
     // D-pad background
     this.add.rectangle(dpadX + gridW / 2, dpadY + gridH / 2, gridW + 8, gridH + 8, 0x0d1117, 0.88)
@@ -1547,24 +1559,24 @@ export class UIScene extends Phaser.Scene {
       });
     }
 
-    // ── Action buttons (right of d-pad) ──────────────────────
-    const BTN_W = 78, BTN_H = 48, BTN_GAP = 3;
+    // ── Action buttons (right of d-pad, 4 buttons filling available width) ──
+    const BTN_GAP = 3;
+    const BTN_H   = Math.min(48, dpadHeight - 4); // fit within d-pad height
     const actionStartX = dpadX + gridW + 10;
-    const rowsH = BTN_H * 2 + BTN_GAP;
-    const actionStartY = startY + Math.floor((height - rowsH) / 2);
+    const BTN_W = Math.floor((W - actionStartX - 4 - 3 * BTN_GAP) / 4);
+    const actionStartY = dpadStartY + Math.floor((dpadHeight - BTN_H) / 2);
 
+    // 4 action buttons only (MAP and PAUSE moved to top-right corner)
     const ACTIONS = [
-      { lbl: 'INV\n[I]',   col: 0, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(1); } },
-      { lbl: 'SKILL\n[K]', col: 1, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(2); } },
-      { lbl: 'CRAFT\n[C]', col: 2, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(3); } },
-      { lbl: 'CHAR\n[P]',  col: 3, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(4); } },
-      { lbl: 'MAP\n[M]',   col: 0, row: 1, action: () => this._toggleMinimap() },
-      { lbl: 'PAUSE',      col: 1, row: 1, action: () => this.bus.emit(EV.PAUSE_GAME) },
+      { lbl: 'INV\n[I]',   col: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(1); } },
+      { lbl: 'SKILL\n[K]', col: 1, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(2); } },
+      { lbl: 'CRAFT\n[C]', col: 2, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(3); } },
+      { lbl: 'CHAR\n[P]',  col: 3, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(4); } },
     ];
 
     for (const act of ACTIONS) {
       const bx = actionStartX + act.col * (BTN_W + BTN_GAP) + BTN_W / 2;
-      const by = actionStartY + act.row * (BTN_H + BTN_GAP) + BTN_H / 2;
+      const by = actionStartY + BTN_H / 2;
 
       const bg = this.add.rectangle(bx, by, BTN_W, BTN_H, 0x111122, 1)
         .setStrokeStyle(1, 0x334466)
