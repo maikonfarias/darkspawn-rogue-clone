@@ -1420,9 +1420,11 @@ export class UIScene extends Phaser.Scene {
     this._buildDPad(W, DPAD_Y, DPAD_H);
 
     // ── UI blocker zones ──────────────────────────────────────
+    // Depth must be BELOW skill hotbar buttons (depth 4) so pointerdown on skills works,
+    // while still appearing in hitTestPointer to block GameScene walking through HUD.
     const uiBlock = (x, y, w, h) =>
       this.add.zone(x + w / 2, y + h / 2, w, h)
-        .setScrollFactor(0).setDepth(9).setInteractive();
+        .setScrollFactor(0).setDepth(3).setInteractive();
     uiBlock(0, 0, W, STATS_H);       // top stats
     uiBlock(0, LOG_Y, W, BOTTOM_H);  // bottom controls
 
@@ -1536,10 +1538,8 @@ export class UIScene extends Phaser.Scene {
       { lbl: 'SKILL\n[K]', col: 1, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(2); } },
       { lbl: 'CRAFT\n[C]', col: 2, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(3); } },
       { lbl: 'CHAR\n[P]',  col: 3, row: 0, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused) gs._openPanel(4); } },
-      { lbl: 'GET\n[G]',   col: 0, row: 1, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused && gs.activePanel === 0) gs._playerPickUp?.(); } },
-      { lbl: 'WAIT\n[.]',  col: 1, row: 1, action: () => { const gs = this.scene.get(SCENE.GAME); if (gs && !gs.gamePaused && gs.activePanel === 0) gs._endPlayerTurn?.(); } },
-      { lbl: 'MAP\n[M]',   col: 2, row: 1, action: () => this._toggleMinimap() },
-      { lbl: 'PAUSE',      col: 3, row: 1, action: () => this.bus.emit(EV.PAUSE_GAME) },
+      { lbl: 'MAP\n[M]',   col: 0, row: 1, action: () => this._toggleMinimap() },
+      { lbl: 'PAUSE',      col: 1, row: 1, action: () => this.bus.emit(EV.PAUSE_GAME) },
     ];
 
     for (const act of ACTIONS) {

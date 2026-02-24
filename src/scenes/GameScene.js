@@ -1348,10 +1348,22 @@ export class GameScene extends Phaser.Scene {
     const cam  = this.cameras.main;
     const zoom = cam.zoom;
     const sf   = 1 / zoom;  // world-units per screen-pixel
-    const PW   = Math.round(Math.min(560, W - 20) * sf);
-    const PH   = Math.round(Math.min(440, H - 60) * sf);
+
+    // In portrait mode the UIScene HUD overlaps the game canvas:
+    //   PORTRAIT_HUD_TOP    matches _buildHUD_portrait STATS_H (88px top stats bar)
+    //   PORTRAIT_HUD_BOTTOM matches _buildHUD_portrait BOTTOM_H (LOG_H+HOTBAR_H+DPAD_H = 192px)
+    // Constrain the panel to the visible game area so it is never hidden behind the HUD.
+    const PORTRAIT_HUD_TOP    = 88;   // px — keep in sync with UIScene _buildHUD_portrait STATS_H
+    const PORTRAIT_HUD_BOTTOM = 192;  // px — keep in sync with UIScene _buildHUD_portrait BOTTOM_H
+    const PANEL_MARGIN        = 20;   // px — minimum breathing room around the panel edges
+    const hudTop    = window.PORTRAIT ? PORTRAIT_HUD_TOP    : 0;
+    const hudBottom = window.PORTRAIT ? PORTRAIT_HUD_BOTTOM : 0;
+    const availH    = H - hudTop - hudBottom;  // screen pixels available between the two HUD bars
+
+    const PW   = Math.round(Math.min(560, W - PANEL_MARGIN) * sf);
+    const PH   = Math.round(Math.min(440, availH - PANEL_MARGIN) * sf);
     const bx   = cam.scrollX + (W * sf - PW) / 2;
-    const by   = cam.scrollY + (H * sf - PH) / 2;
+    const by   = cam.scrollY + (hudTop + (availH - PH * zoom) / 2) * sf;
     this._panelSf = sf;
 
     this.overlayPanel = this.add.container(0, 0).setDepth(30);
