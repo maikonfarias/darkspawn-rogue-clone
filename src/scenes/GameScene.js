@@ -1145,10 +1145,8 @@ export class GameScene extends Phaser.Scene {
 
   _onTargetMove(ptr) {
     if (!this.targeting) return;
-    const zoom = this.cameras.main.zoom;
-    const wx = this.cameras.main.scrollX + ptr.x / zoom;
-    const wy = this.cameras.main.scrollY + ptr.y / zoom;
-    const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
+    const wp = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
+    const tx = Math.floor(wp.x / T), ty = Math.floor(wp.y / T);
     if (this._targetCursor) {
       this._targetCursor.setPosition(tx * T + T / 2, ty * T + T / 2).setVisible(true);
     }
@@ -1275,11 +1273,9 @@ export class GameScene extends Phaser.Scene {
       // Click-to-walk: ignore clicks over UI panels
       if (this.activePanel !== PANEL.NONE) return;
 
-      const zoom = this.cameras.main.zoom;
-      const wx = this.cameras.main.scrollX + ptr.x / zoom;
-      const wy = this.cameras.main.scrollY + ptr.y / zoom;
-      const tx = Math.floor(wx / T);
-      const ty = Math.floor(wy / T);
+      const wp = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
+      const tx = Math.floor(wp.x / T);
+      const ty = Math.floor(wp.y / T);
 
       // Must be an explored tile
       if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return;
@@ -1291,10 +1287,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Targeting mode (skill aim): handle spell click
-    const zoom = this.cameras.main.zoom;
-    const wx = this.cameras.main.scrollX + ptr.x / zoom;
-    const wy = this.cameras.main.scrollY + ptr.y / zoom;
-    const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
+    const wp = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
+    const tx = Math.floor(wp.x / T), ty = Math.floor(wp.y / T);
 
     if (this._targetCursor) { this._targetCursor.destroy(); this._targetCursor = null; }
     this.input.off('pointermove', this._onTargetMove, this);
