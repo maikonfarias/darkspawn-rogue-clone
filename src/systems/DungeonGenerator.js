@@ -115,8 +115,6 @@ function connectRooms(grid, r1, r2) {
     carveVCorridor(grid, cy1, cy2, cx1);
     carveHCorridor(grid, cx1, cx2, cy2);
   }
-  // Place a door at the junction
-  if (inBounds(cx2, cy1)) grid[cy1][cx2] = TILE.DOOR;
 }
 
 function connectBSP(grid, node) {
@@ -128,16 +126,71 @@ function connectBSP(grid, node) {
   if (r1 && r2) connectRooms(grid, r1, r2);
 }
 
-// Remove doors that don't have open tiles on exactly opposite sides (N/S or E/W).
-// Diagonal or corner positions are not valid door placements.
-function pruneInvalidDoors(grid) {
-  const isOpen = (x, y) => inBounds(x, y) && grid[y][x] !== TILE.WALL && grid[y][x] !== TILE.VOID;
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
-      if (grid[y][x] !== TILE.DOOR) continue;
-      const verticalOk   = isOpen(x, y - 1) && isOpen(x, y + 1);
-      const horizontalOk = isOpen(x - 1, y) && isOpen(x + 1, y);
-      if (!verticalOk && !horizontalOk) grid[y][x] = TILE.FLOOR;
+// Scan for corridor chokepoints and place doors there.
+// A chokepoint is a FLOOR tile that is NOT part of any room interior,
+// has passable tiles on exactly one axis (N+S or E+W) and walls on the other.
+// A tile is a valid door position only if it has walkable tiles on both sides
+// of one axis AND wall tiles on both sides of the perpendicular axis.
+function isValidDoor(grid, x, y) {
+  const isWall = (tx, ty) => !inBounds(tx, ty) || grid[ty][tx] === TILE.WALL || grid[ty][tx] === TILE.VOID;
+  const isWalk = (tx, ty) => inBounds(tx, ty) && grid[ty][tx] !== TILE.WALL && grid[ty][tx] !== TILE.VOID;
+  const vertOk  = isWalk(x, y - 1) && isWalk(x, y + 1) && isWall(x - 1, y) && isWall(x + 1, y);
+  const horizOk = isWalk(x - 1, y) && isWalk(x + 1, y) && isWall(x, y - 1) && isWall(x, y + 1);
+  return vertOk || horizOk;
+}
+
+// For each room, collect the corridor entry points (FLOOR tiles just outside
+// the room's walls) and place a door there with ~15% probability per entry.
+function placeDoors(grid, rooms) {
+  for (const r of rooms) {
+    const entries = [];
+    // Top wall
+    for (let x = r.x; x < r.x + r.w; x++)
+      if (inBounds(x, r.y - 1) && grid[r.y - 1][x] === TILE.FLOOR) entries.push({ x, y: r.y - 1 });
+    // Bottom wall
+    for (let x = r.x; x < r.x + r.w; x++)
+      if (inBounds(x, r.y + r.h) && grid[r.y + r.h][x] === TILE.FLOOR) entries.push({ x, y: r.y + r.h });
+    // Left wall
+    for (let y = r.y; y < r.y + r.h; y++)
+      if (inBounds(r.x - 1, y) && grid[y][r.x - 1] === TILE.FLOOR) entries.push({ x: r.x - 1, y });
+    // Right wall
+    for (let y = r.y; y < r.y + r.h; y++)
+      if (inBounds(r.x + r.w, y) && grid[y][r.x + r.w] === TILE.FLOOR) entries.push({ x: r.x + r.w, y });
+
+    // ~15% chance to place a door at each entry (at most 2 per room)
+    let placed = 0;
+    for (const entry of shuffle([...entries])) {
+      if (placed >= 2) break;
+      if (chance(0.30) && isValidDoor(grid, entry.x, entry.y)) {
+        grid[entry.y][entry.x] = TILE.DOOR;
+        placed++;
+      }
+    }
+  }
+}
+
+// Place exactly one door at the point where the corridor enters room2.
+// Scans the one-tile perimeter outside room2's walls for any FLOOR tile
+// (carved by the corridor) and places a DOOR there.
+function placeFloor1Door(grid, room2) {
+  const perimeter = [];
+  // Top wall
+  for (let x = room2.x; x < room2.x + room2.w; x++)
+    perimeter.push({ x, y: room2.y - 1 });
+  // Bottom wall
+  for (let x = room2.x; x < room2.x + room2.w; x++)
+    perimeter.push({ x, y: room2.y + room2.h });
+  // Left wall
+  for (let y = room2.y; y < room2.y + room2.h; y++)
+    perimeter.push({ x: room2.x - 1, y });
+  // Right wall
+  for (let y = room2.y; y < room2.y + room2.h; y++)
+    perimeter.push({ x: room2.x + room2.w, y });
+
+  for (const { x, y } of perimeter) {
+    if (inBounds(x, y) && grid[y][x] === TILE.FLOOR && isValidDoor(grid, x, y)) {
+      grid[y][x] = TILE.DOOR;
+      break; // only one door
     }
   }
 }
@@ -164,22 +217,23 @@ function randInRoom(room) {
 function generateFloor1() {
   const grid = createGrid(MAP_W, MAP_H);
 
-  // Room 1 (start) — left half of map
+  // Room 1 (start) — placed so its right wall is a few tiles left of center
   const r1w = rand(6, 9), r1h = rand(5, 7);
-  const r1x = rand(6, Math.floor(MAP_W / 2) - r1w - 6);
+  const mid = Math.floor(MAP_W / 2);
+  const r1x = mid - r1w - rand(2, 4);
   const r1y = rand(10, MAP_H - r1h - 10);
   const room1 = { x: r1x, y: r1y, w: r1w, h: r1h };
 
-  // Room 2 (end) — right half of map
+  // Room 2 (end) — placed so its left wall is a few tiles right of center
   const r2w = rand(6, 9), r2h = rand(5, 7);
-  const r2x = rand(Math.floor(MAP_W / 2) + 6, MAP_W - r2w - 6);
+  const r2x = mid + rand(2, 4);
   const r2y = rand(10, MAP_H - r2h - 10);
   const room2 = { x: r2x, y: r2y, w: r2w, h: r2h };
 
   carveRoom(grid, room1);
   carveRoom(grid, room2);
   connectRooms(grid, room1, room2);
-  pruneInvalidDoors(grid);
+  placeFloor1Door(grid, room2);
 
   const startPos = center(room1);
   const endPos   = center(room2);
@@ -248,8 +302,8 @@ export function generateDungeon(floor) {
   // Carve all rooms into grid
   for (const r of rooms) carveRoom(grid, r);
 
-  // Remove doors that are not properly positioned (need ≥2 open neighbours)
-  pruneInvalidDoors(grid);
+  // Place doors at corridor chokepoints (outside room interiors)
+  placeDoors(grid, rooms);
 
   // Shuffle rooms for random start/end
   const shuffled = shuffle([...rooms]);
@@ -279,8 +333,8 @@ export function generateDungeon(floor) {
     monsterSpawns.push(randInRoom(room));
   }
 
-  // Item spawn points
-  const maxItems = DUNGEON_CFG.MAX_ITEMS_BASE + Math.floor(floor * 0.8);
+  // Item spawn points — scale gently with floor depth so early floors aren't flooded
+  const maxItems = DUNGEON_CFG.MAX_ITEMS_BASE + Math.floor(floor * 0.6);
   const itemSpawns = [];
   for (let i = 0; i < maxItems; i++) {
     const room = pick(shuffled);

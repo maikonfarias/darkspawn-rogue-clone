@@ -98,7 +98,7 @@ export const DUNGEON_CFG = Object.freeze({
   BSP_MIN_SIZE:     8,
   FOV_RADIUS:       8,
   MAX_MONSTERS_BASE: 5,
-  MAX_ITEMS_BASE:    4,
+  MAX_ITEMS_BASE:    2,
 });
 
 // ── Player Config ────────────────────────────────────────────

@@ -24,6 +24,14 @@ import { SFX } from '../systems/SoundEffects.js';
 
 const T = TILE_SIZE;
 
+const ARMOR_OVERLAY = {
+  leatherArmor: 'armor-overlay-leather',
+  chainMail:    'armor-overlay-chain',
+  plateArmor:   'armor-overlay-plate',
+  mageRobe:     'armor-overlay-robe',
+  dragonScale:  'armor-overlay-dragon',
+};
+
 // ── Panel states ─────────────────────────────────────────────
 const PANEL = { NONE: 0, INVENTORY: 1, SKILLS: 2, CRAFTING: 3, CHAR: 4 };
 
@@ -82,6 +90,7 @@ export class GameScene extends Phaser.Scene {
     this.events_bus.on(EV.PAUSE_GAME,   () => { this.gamePaused = true; });
     this.events_bus.on(EV.RESUME_GAME,  () => { this.gamePaused = false; });
     this.events_bus.on('float-dmg', ({ x, y, dmg, color }) => this._showDamageNumber(x, y, dmg, color));
+    this.events_bus.on(EV.STATS_CHANGED, () => this._updateArmorOverlay());
 
     // Persistent graphics layers for status icons and AoE preview
     this._statusIconGraphics = this.add.graphics().setDepth(22);
@@ -557,6 +566,15 @@ export class GameScene extends Phaser.Scene {
     );
     this.entityLayer.add(this.playerSprite);
 
+    // Armor overlay (sits on top of player sprite, texture swapped on equip change)
+    this._armorOverlaySprite = this.add.image(
+      this.player.x * T + T / 2,
+      this.player.y * T + T / 2,
+      'armor-overlay-leather'
+    ).setVisible(false);
+    this.entityLayer.add(this._armorOverlaySprite);
+    this._updateArmorOverlay();
+
     // HP bar above player
     this.playerHpBar = this._makeHealthBar(this.entityLayer, 0, 0, T, 4);
     this.entityLayer.add(this.playerHpBar.bg);
@@ -623,6 +641,18 @@ export class GameScene extends Phaser.Scene {
       this.entityLayer.add(hpFill);
 
       this.monsterSprites.set(m, { spr, hpBg, hpFill });
+    }
+  }
+
+  /** Swap the armor overlay sprite texture to match the currently equipped armor. */
+  _updateArmorOverlay() {
+    if (!this._armorOverlaySprite) return;
+    const armor = this.player.equipment?.armor;
+    const key = armor ? ARMOR_OVERLAY[armor.id] : null;
+    if (key) {
+      this._armorOverlaySprite.setTexture(key).setVisible(true);
+    } else {
+      this._armorOverlaySprite.setVisible(false);
     }
   }
 
@@ -702,6 +732,10 @@ export class GameScene extends Phaser.Scene {
 
     // Player sprite
     this.playerSprite.setPosition(this.player.x * T + T / 2, this.player.y * T + T / 2);
+    // Armor overlay — keep in sync with player
+    if (this._armorOverlaySprite) {
+      this._armorOverlaySprite.setPosition(this.playerSprite.x, this.playerSprite.y);
+    }
 
     // Action hint above player on stairs / portal (Ⓐ ENTER with controller, ENTER with keyboard)
     if (this._actionHint) {

@@ -225,20 +225,19 @@ function genPlayer(scene) {
   g.fillStyle(0x000000, 0); g.fillRect(0, 0, T, T);
   // Boots
   g.fillStyle(0x5c3d1e, 1); g.fillRect(8, 26, 5, 5); g.fillRect(19, 26, 5, 5);
-  // Legs / pants
-  g.fillStyle(0x2e4b8a, 1); g.fillRect(9, 19, 5, 8); g.fillRect(18, 19, 5, 8);
-  // Armor body
-  g.fillStyle(0x6688aa, 1); g.fillRect(8, 12, 16, 10);
-  g.fillStyle(0x7799bb, 1); g.fillRect(9, 12, 14, 4); // chest highlight
-  // Pauldrons
-  g.fillStyle(0x7799bb, 1); g.fillRect(4, 12, 5, 5); g.fillRect(23, 12, 5, 5);
+  // Legs / worn trousers
+  g.fillStyle(0x5a3e28, 1); g.fillRect(9, 19, 5, 8); g.fillRect(18, 19, 5, 8);
+  // Shirt body (linen / rags)
+  g.fillStyle(0xc8a070, 1); g.fillRect(8, 12, 16, 10);
+  g.fillStyle(0xdcb884, 1); g.fillRect(9, 12, 14, 4); // shirt highlight
+  // Sleeves (shirt, no pauldrons)
+  g.fillStyle(0xc8a070, 1); g.fillRect(4, 12, 5, 5); g.fillRect(23, 12, 5, 5);
   // Neck
   g.fillStyle(0xd4a96a, 1); g.fillRect(13, 9, 6, 4);
   // Head
   g.fillStyle(0xd4a96a, 1); g.fillRect(10, 2, 12, 10);
-  // Helmet
-  g.fillStyle(0x6688aa, 1); g.fillRect(9, 2, 14, 5);
-  g.fillStyle(0x7799bb, 1); g.fillRect(10, 2, 12, 2);
+  // Hair (no helmet on base sprite)
+  g.fillStyle(0x3a2010, 1); g.fillRect(9, 2, 14, 4);
   // Eyes
   g.fillStyle(0x44aaff, 1); g.fillRect(12, 6, 3, 2); g.fillRect(17, 6, 3, 2);
   // Sword
@@ -1107,13 +1106,41 @@ export function generateAllTextures(scene) {
   genItemTextures(scene);
   genSkillIcons(scene);
   genTownPortal(scene);
+  genArmorOverlays(scene);
 
   for (const [id, def] of Object.entries(MONSTERS)) {
     genMonster(scene, id, def);
   }
 }
 
-// Tile key → texture key map
+// ── Armor overlay textures (drawn transparently over the player sprite) ──────
+function genArmorOverlay(scene, key, chestColor, hiColor, helmColor = null) {
+  const g = scene.make.graphics({ add: false });
+  g.fillStyle(0x000000, 0); g.fillRect(0, 0, T, T);
+  const a = 0.78;
+  // Chest body
+  g.fillStyle(chestColor, a); g.fillRect(8, 12, 16, 10);
+  // Chest highlight
+  g.fillStyle(hiColor, a); g.fillRect(9, 12, 14, 3);
+  // Pauldrons
+  g.fillStyle(chestColor, a); g.fillRect(4, 12, 5, 5); g.fillRect(23, 12, 5, 5);
+  // Optional helmet
+  if (helmColor !== null) {
+    g.fillStyle(helmColor, a); g.fillRect(9, 2, 14, 5);
+    g.fillStyle(hiColor, a * 0.7); g.fillRect(10, 2, 12, 2);
+  }
+  g.generateTexture(key, T, T);
+  g.destroy();
+}
+
+function genArmorOverlays(scene) {
+  genArmorOverlay(scene, 'armor-overlay-leather', 0x8b5e3c, 0xb07848);
+  genArmorOverlay(scene, 'armor-overlay-chain',   0x888888, 0xaaaaaa);
+  genArmorOverlay(scene, 'armor-overlay-plate',   0xc8c8d8, 0xeeeeee, 0xc8c8d8);
+  genArmorOverlay(scene, 'armor-overlay-robe',    0x7733cc, 0xaa44ff);
+  genArmorOverlay(scene, 'armor-overlay-dragon',  0xcc2222, 0xff5555, 0xcc2222);
+}
+
 export const TILE_TEXTURE = {
   '-1': 'tile-void',
   '0':  'tile-wall',
