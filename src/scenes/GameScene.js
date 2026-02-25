@@ -436,7 +436,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Adapt music atmosphere to the new floor depth
-    Music.setTheme(themeForFloor(floorNum));
+    Music.play(themeForFloor(floorNum));
   }
 
   // ── Spawning ─────────────────────────────────────────────
@@ -885,26 +885,23 @@ export class GameScene extends Phaser.Scene {
     this.player.x = nx;
     this.player.y = ny;
 
-    // Check if the player stepped onto the town portal
-    if (this.floor === 0 && this._portalReturn && this._portalPos &&
-        nx === this._portalPos.x && ny === this._portalPos.y) {
-      this._useTownPortal();
-      return;
-    }
-
     // Check for adjacent NPC in town
     this._checkNPCAdjacency();
 
     // Auto-pickup all items on this tile
     const itemsHere = this.floorItems.filter(f => f.x === nx && f.y === ny);
+    let pickedUpAny = false;
     for (const fi of itemsHere) {
       if (fi.item.type === ITEM_TYPE.GOLD)   SFX.play('coin');
       else if (fi.item.type === ITEM_TYPE.POTION) SFX.play('potion');
       else SFX.play('equip');
-      this.player.pickUpItem(fi.item);
-      this.floorItems.splice(this.floorItems.indexOf(fi), 1);
+      const ok = this.player.pickUpItem(fi.item);
+      if (ok) {
+        this.floorItems.splice(this.floorItems.indexOf(fi), 1);
+        pickedUpAny = true;
+      }
     }
-    if (itemsHere.length > 0) this._rebuildItemSprites();
+    if (pickedUpAny) this._rebuildItemSprites();
 
     this._endPlayerTurn();
   }
@@ -978,10 +975,14 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // 2. Use stairs
+    // 2. Use stairs / portal
     const tile = this.grid[py][px];
     if (tile === TILE.STAIRS_DOWN) { this._playerDescend(); return; }
     if (tile === TILE.STAIRS_UP)   { this._playerAscend();  return; }
+    if (this.floor === 0 && this._portalReturn && this._portalPos &&
+        px === this._portalPos.x && py === this._portalPos.y) {
+      this._useTownPortal(); return;
+    }
 
     // 3. Wait a turn
     this.events_bus.emit(EV.LOG_MSG, { text: 'You wait.', color: '#556677' });
@@ -997,9 +998,11 @@ export class GameScene extends Phaser.Scene {
     if (fi.item.type === ITEM_TYPE.GOLD)        SFX.play('coin');
     else if (fi.item.type === ITEM_TYPE.POTION) SFX.play('potion');
     else SFX.play('equip');
-    this.player.pickUpItem(fi.item);
-    this.floorItems.splice(this.floorItems.indexOf(fi), 1);
-    this._rebuildItemSprites();
+    const ok = this.player.pickUpItem(fi.item);
+    if (ok) {
+      this.floorItems.splice(this.floorItems.indexOf(fi), 1);
+      this._rebuildItemSprites();
+    }
     this._endPlayerTurn();
   }
 

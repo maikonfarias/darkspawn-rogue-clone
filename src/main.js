@@ -13,10 +13,10 @@ import { SFX }          from './systems/SoundEffects.js';
 // Pause/resume all audio when the browser tab loses/gains focus
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    Music.suspend();
+    Music.pause();
     SFX.suspend();
   } else {
-    Music.resume();
+    if (Music.musicEnabled) Music.unpause();
     SFX.resume();
   }
 });

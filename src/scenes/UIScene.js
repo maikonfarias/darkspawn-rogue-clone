@@ -1448,7 +1448,7 @@ export class UIScene extends Phaser.Scene {
       return btn;
     };
 
-    Music.suspend();
+    Music.pause();
 
     const gs = this.scene.get(SCENE.GAME);
     const skillPts = gs?.player?.skillPoints ?? 0;
@@ -1514,9 +1514,14 @@ export class UIScene extends Phaser.Scene {
       () => {
         if (Music.musicEnabled) {
           Music.musicEnabled = false;
+          Music.pause();
         } else {
           Music.musicEnabled = true;
-          if (!Music.isPlaying) Music.play(Music.themeKey ?? 'shallow');
+          if (Music.isPlaying) {
+            Music.unpause();
+          } else {
+            Music.play(Music.themeKey ?? 'shallow');
+          }
         }
         Settings.musicEnabled = Music.musicEnabled;
         Settings.save();
@@ -1542,7 +1547,7 @@ export class UIScene extends Phaser.Scene {
       this.input.keyboard.off('keydown-ESC', this._pauseEscHandler);
       this._pauseEscHandler = null;
     }
-    Music.resume();
+    if (Music.musicEnabled) Music.unpause();
   }
 
   _showInstructions() {

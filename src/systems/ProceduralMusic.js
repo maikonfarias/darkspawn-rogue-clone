@@ -110,6 +110,20 @@ class ProceduralMusicEngine {
     }, 350);
   }
 
+  /** Pause: instantly mute master gain (music keeps playing underneath). */
+  pause() {
+    if (!this._master || !this._ctx) return;
+    this._master.gain.cancelScheduledValues(this._ctx.currentTime);
+    this._master.gain.setTargetAtTime(0, this._ctx.currentTime, 0.05);
+  }
+
+  /** Unpause: restore master gain to the current volume setting. */
+  unpause() {
+    if (!this._master || !this._ctx) return;
+    this._master.gain.cancelScheduledValues(this._ctx.currentTime);
+    this._master.gain.setTargetAtTime(this._volume, this._ctx.currentTime, 0.05);
+  }
+
   // ── Public API ──────────────────────────────────────────
 
   /**

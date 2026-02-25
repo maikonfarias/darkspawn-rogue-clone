@@ -23,7 +23,7 @@ export const ITEMS = {
   chainMail:  { id:'chainMail',  name:'Chain Mail',       type:ITEM_TYPE.ARMOR,  slot:SLOT.ARMOR,  char:'[', color:C.GRAY,    def:5,  description:'Interlocked metal rings.',        value:50,  weight:8  },
   plateArmor: { id:'plateArmor', name:'Plate Armor',      type:ITEM_TYPE.ARMOR,  slot:SLOT.ARMOR,  char:'[', color:C.WHITE,   def:9,  description:'Heavy full plate protection.',    value:100, weight:14 },
   mageRobe:   { id:'mageRobe',   name:'Mage Robe',        type:ITEM_TYPE.ARMOR,  slot:SLOT.ARMOR,  char:'[', color:C.PURPLE,  def:1,  manaBonus:15, description:'Arcane-infused robe.',    value:70,  weight:3  },
-  dragonScale: { id:'dragonScale',name:'Dragon Scale',    type:ITEM_TYPE.ARMOR,  slot:SLOT.ARMOR,  char:'[', color:C.RED,     def:12, description:'Scales of a fearsome dragon.',    value:250, weight:10 },
+  dragonScale: { id:'dragonScale',name:'Dragon Armor',    type:ITEM_TYPE.ARMOR,  slot:SLOT.ARMOR,  char:'[', color:C.RED,     def:12, description:'Scales of a fearsome dragon.',    value:250, weight:10 },
 
   // ── Rings ──────────────────────────────────────────────────
   ironRing:   { id:'ironRing',   name:'Iron Ring',        type:ITEM_TYPE.RING,   slot:SLOT.RING,   char:'o', color:C.GRAY,    def:1,  description:'A plain iron ring.',              value:10,  weight:0  },
