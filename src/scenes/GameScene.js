@@ -42,6 +42,9 @@ const WEAPON_OVERLAY = {
   runicBlade: 'weapon-overlay-runicblade',
 };
 
+// Skills that require picking a tile before they fire
+const TARGETABLE_SKILLS = new Set(['magicBolt', 'fireball', 'shadowStep', 'deathMark']);
+
 // ── Panel states ─────────────────────────────────────────────
 const PANEL = { NONE: 0, INVENTORY: 1, SKILLS: 2, CRAFTING: 3, CHAR: 4 };
 
@@ -276,10 +279,12 @@ export class GameScene extends Phaser.Scene {
         }
 
         // Face buttons: A(0) B(1) X(2) Y(3)
-        const aPressed = !!pad.buttons[0]?.pressed;
-        const bPressed = !!pad.buttons[1]?.pressed;
-        const xPressed = !!pad.buttons[2]?.pressed;
-        const yPressed = !!pad.buttons[3]?.pressed;
+        const aPressed  = !!pad.buttons[0]?.pressed;
+        const bPressed  = !!pad.buttons[1]?.pressed;
+        const xPressed  = !!pad.buttons[2]?.pressed;
+        const yPressed  = !!pad.buttons[3]?.pressed;
+        const lbPressed = !!pad.buttons[4]?.pressed;
+        const rbPressed = !!pad.buttons[5]?.pressed;
 
         if (this._controllerMode) {
           if (this.targeting) {
@@ -294,15 +299,28 @@ export class GameScene extends Phaser.Scene {
           } else {
             // A → default action
             if (aPressed && !prev[0]) { this._cancelClickWalk(); this._playerDefaultAction(); }
-            // X → hotbar skill 0 (first unlocked active skill)
-            if (xPressed && !prev[2]) this._triggerPadHotbarSkill(0);
-            // Y → hotbar skill 1 (second unlocked active skill)
-            if (yPressed && !prev[3]) this._triggerPadHotbarSkill(1);
+            // X → quick-cast the currently selected hotbar slot
+            if (xPressed && !prev[2]) this._padQuickCast();
+            // Y → manual targeting for the currently selected hotbar slot
+            if (yPressed && !prev[3]) this._padManualTarget();
+            // LB / RB — cycle selected hotbar slot left / right
+            if (lbPressed && !prev[4]) {
+              const ui = this.scene.get(SCENE.UI);
+              const len = ui?._hotbarSkills?.length ?? 1;
+              this._padHotbarIdx = (this._padHotbarIdx - 1 + len) % len;
+              ui?._refreshSkillHotbar?.();
+            }
+            if (rbPressed && !prev[5]) {
+              const ui = this.scene.get(SCENE.UI);
+              const len = ui?._hotbarSkills?.length ?? 1;
+              this._padHotbarIdx = (this._padHotbarIdx + 1) % len;
+              ui?._refreshSkillHotbar?.();
+            }
           }
         }
 
         // Store this frame's state for next frame edge detection
-        this._padPrevButtons[pi] = { 0: aPressed, 1: bPressed, 2: xPressed, 3: yPressed };
+        this._padPrevButtons[pi] = { 0: aPressed, 1: bPressed, 2: xPressed, 3: yPressed, 4: lbPressed, 5: rbPressed };
       }
 
       // First time we see any input: activate controller mode and eat the frame
@@ -870,8 +888,10 @@ export class GameScene extends Phaser.Scene {
     // Gamepad targeting cursor state
     this._padTargetX          = 0;
     this._padTargetY          = 0;
-    this._padTargetNavHeld    = null;
-    this._padTargetNavLast    = 0;
+    this._padTargetNavHeld      = null;
+    this._padTargetNavLast      = 0;
+    this._padHotbarIdx          = 0;    // selected hotbar slot for controller nav
+    this._padTargetGridGraphics = null; // green tile overlay during manual targeting
 
     this.input.on('pointermove',  ()    => { this._controllerMode = false; });
     this.input.on('pointerdown', (ptr) => { this._controllerMode = false; this._onPointerDown(ptr); });
@@ -1553,6 +1573,7 @@ export class GameScene extends Phaser.Scene {
     this.input.off('pointermove', this._onTargetMove, this);
     this.targeting = false;
     if (this._aoeGraphics) this._aoeGraphics.clear();
+    this._clearTargetGrid();
     if (emitEvent) this.events_bus?.emit('skill-selection-done');
   }
 
@@ -1632,6 +1653,163 @@ export class GameScene extends Phaser.Scene {
     const tx = this._padTargetX;
     const ty = this._padTargetY;
     this._castAtTile(tx, ty);
+  }
+
+  /** Destroy the green tile-target grid overlay if it exists. */
+  _clearTargetGrid() {
+    if (this._padTargetGridGraphics) {
+      this._padTargetGridGraphics.clear();
+      this._padTargetGridGraphics.destroy();
+      this._padTargetGridGraphics = null;
+    }
+  }
+
+  /**
+   * X button — instantly cast the selected hotbar skill with auto-targeting:
+   * - attack: attacks nearest+weakest visible enemy if adjacent, otherwise logs out-of-range
+   * - targetable spell: auto-aims at nearest+weakest visible enemy and fires
+   * - instant skill: activates immediately
+   */
+  _padQuickCast() {
+    if (this.gamePaused || this.activePanel !== PANEL.NONE || this.targeting) return;
+    const ui     = this.scene.get(SCENE.UI);
+    const skillId = ui?._hotbarSkills?.[this._padHotbarIdx] ?? 'attack';
+
+    if (skillId === 'attack') {
+      const visible = this.monsters.filter(m => !m.isDead && this.vis[m.y]?.[m.x] === VIS.VISIBLE);
+      if (!visible.length) {
+        this.events_bus.emit(EV.LOG_MSG, { text: 'No visible enemies.', color: '#778899' });
+        this._endPlayerTurn();
+        return;
+      }
+      visible.sort((a, b) => {
+        const da = Math.abs(a.x - this.player.x) + Math.abs(a.y - this.player.y);
+        const db = Math.abs(b.x - this.player.x) + Math.abs(b.y - this.player.y);
+        return da !== db ? da - db : a.stats.hp - b.stats.hp;
+      });
+      const target = visible[0];
+      if (Math.abs(target.x - this.player.x) <= 1 && Math.abs(target.y - this.player.y) <= 1) {
+        this._playerAttack(target);
+      } else {
+        this.events_bus.emit(EV.LOG_MSG, { text: `${target.name} is not in range.`, color: '#778899' });
+      }
+      this._endPlayerTurn();
+      return;
+    }
+
+    const def  = SKILL_BY_ID[skillId];
+    const mana = def?.active?.cost ?? 0;
+    if (this.player.stats.mana < mana) {
+      this.events_bus.emit(EV.LOG_MSG, { text: 'Not enough mana!', color: '#ff8888' });
+      return;
+    }
+
+    if (TARGETABLE_SKILLS.has(skillId)) {
+      const visible = this.monsters.filter(m => !m.isDead && this.vis[m.y]?.[m.x] === VIS.VISIBLE);
+      if (!visible.length) {
+        this.events_bus.emit(EV.LOG_MSG, { text: 'No visible enemies.', color: '#778899' });
+        return;
+      }
+      visible.sort((a, b) => {
+        const da = Math.abs(a.x - this.player.x) + Math.abs(a.y - this.player.y);
+        const db = Math.abs(b.x - this.player.x) + Math.abs(b.y - this.player.y);
+        return da !== db ? da - db : a.stats.hp - b.stats.hp;
+      });
+      const target = visible[0];
+      // Set up pending cast then confirm immediately
+      this._enterTargetingMode(skillId);
+      this._padTargetX = target.x;
+      this._padTargetY = target.y;
+      this._castAtTile(target.x, target.y);
+    } else {
+      this.useActiveSkill(skillId);
+    }
+    ui?._clearSkillSelection?.();
+  }
+
+  /**
+   * Y button — enter manual targeting for the selected hotbar skill:
+   * - attack: shows the 8 melee tiles highlighted in green, player aims with D-pad, A to confirm
+   * - targetable spell: enters targeting mode with all visible tiles highlighted green
+   * - instant skill: activates immediately (same as X)
+   */
+  _padManualTarget() {
+    if (this.gamePaused || this.activePanel !== PANEL.NONE || this.targeting) return;
+    const ui      = this.scene.get(SCENE.UI);
+    const skillId = ui?._hotbarSkills?.[this._padHotbarIdx] ?? 'attack';
+
+    if (skillId === 'attack') {
+      // Highlight the 8 adjacent tiles and enter melee targeting mode
+      this._clearTargetGrid();
+      this._padTargetGridGraphics = this.add.graphics().setDepth(14);
+      const g = this._padTargetGridGraphics;
+      let firstValid = null;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const tx = this.player.x + dx, ty = this.player.y + dy;
+          if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) continue;
+          const tile = this.grid[ty]?.[tx];
+          if (tile === TILE.WALL || tile === TILE.VOID || tile === undefined) continue;
+          g.fillStyle(0x00ff88, 0.20); g.fillRect(tx * T, ty * T, T, T);
+          g.lineStyle(1, 0x00ff88, 0.7); g.strokeRect(tx * T, ty * T, T, T);
+          if (!firstValid) firstValid = { x: tx, y: ty };
+        }
+      }
+      this.targeting    = true;
+      this.targetMode   = 'melee-attack';
+      this.targetExtra  = {};
+      this._padTargetX  = firstValid?.x ?? this.player.x;
+      this._padTargetY  = firstValid?.y ?? this.player.y;
+      this._padTargetNavHeld = null;
+      this._targetCursor = this.add.rectangle(0, 0, T, T, 0xffffff, 0.30).setVisible(false).setDepth(25);
+      this._drawTargetPreview(this._padTargetX, this._padTargetY);
+      this.events_bus.emit(EV.LOG_MSG, { text: 'Attack — aim with D-Pad  Ⓐ confirm  Ⓑ cancel', color: '#88ffaa' });
+      return;
+    }
+
+    const def  = SKILL_BY_ID[skillId];
+    const mana = def?.active?.cost ?? 0;
+    if (this.player.stats.mana < mana) {
+      this.events_bus.emit(EV.LOG_MSG, { text: 'Not enough mana!', color: '#ff8888' });
+      return;
+    }
+
+    if (TARGETABLE_SKILLS.has(skillId)) {
+      // Enter targeting mode first (sets up cursor / listeners / targetExtra)
+      this._enterTargetingMode(skillId);
+      // Draw green grid over all currently visible tiles
+      this._padTargetGridGraphics = this.add.graphics().setDepth(14);
+      const g = this._padTargetGridGraphics;
+      for (let y = 0; y < MAP_H; y++) {
+        for (let x = 0; x < MAP_W; x++) {
+          if (this.vis[y]?.[x] !== VIS.VISIBLE) continue;
+          g.fillStyle(0x00ff88, 0.14); g.fillRect(x * T, y * T, T, T);
+          g.lineStyle(1, 0x00ff88, 0.40); g.strokeRect(x * T, y * T, T, T);
+        }
+      }
+      // Seed pad cursor at nearest visible monster (or player pos)
+      const visible = this.monsters.filter(m => !m.isDead && this.vis[m.y]?.[m.x] === VIS.VISIBLE);
+      if (visible.length) {
+        visible.sort((a, b) => {
+          const da = Math.abs(a.x - this.player.x) + Math.abs(a.y - this.player.y);
+          const db = Math.abs(b.x - this.player.x) + Math.abs(b.y - this.player.y);
+          return da - db;
+        });
+        this._padTargetX = visible[0].x;
+        this._padTargetY = visible[0].y;
+      } else {
+        this._padTargetX = this.player.x;
+        this._padTargetY = this.player.y;
+      }
+      this._padTargetNavHeld = null;
+      this._drawTargetPreview(this._padTargetX, this._padTargetY);
+      this.events_bus.emit(EV.LOG_MSG, { text: `${def.name} — D-Pad: aim  Ⓐ cast  Ⓑ cancel`, color: '#88aaff' });
+    } else {
+      // Instant skill — same behaviour as quick-cast
+      this.useActiveSkill(skillId);
+      ui?._clearSkillSelection?.();
+    }
   }
 
   // ── Click-to-walk ─────────────────────────────────────────
@@ -1769,6 +1947,7 @@ export class GameScene extends Phaser.Scene {
     this.input.off('pointermove', this._onTargetMove, this);
     this.targeting = false;
     if (this._aoeGraphics) this._aoeGraphics.clear();
+    this._clearTargetGrid();
 
     const mode = this.targetMode;
     let   extra = this.targetExtra;
@@ -1821,6 +2000,13 @@ export class GameScene extends Phaser.Scene {
         this._playSkillAnimation('deathMark', tx, ty);
         applyStatus(m, 'deathMark', 10);
         this.events_bus.emit(EV.LOG_MSG, { text: `${m.name} is marked for death!`, color: '#ff44ff' });
+      }
+    } else if (mode === 'melee-attack') {
+      const m = this.monsters.find(mon => mon.x === tx && mon.y === ty && !mon.isDead);
+      if (m) {
+        this._playerAttack(m);
+      } else {
+        this.events_bus.emit(EV.LOG_MSG, { text: 'No enemy there.', color: '#778899' });
       }
     }
 

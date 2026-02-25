@@ -534,6 +534,11 @@ export class UIScene extends Phaser.Scene {
     // 'attack' is always slot 0 — the base melee attack using the equipped weapon
     const allSlots = ['attack', ...unlocked];
     this._hotbarSkills = allSlots;
+    // Clamp pad hotbar index to valid range whenever skills change
+    const gs2 = this.scene.get(SCENE.GAME);
+    if (gs2 && gs2._padHotbarIdx !== undefined) {
+      gs2._padHotbarIdx = Math.max(0, Math.min(gs2._padHotbarIdx, allSlots.length - 1));
+    }
 
     const SZ = this._hotbarSZ, GAP = this._hotbarGAP;
     const totalW     = allSlots.length * (SZ + GAP) - GAP;
@@ -544,21 +549,23 @@ export class UIScene extends Phaser.Scene {
     allSlots.forEach((skillId, i) => {
       const sx = startX + i * (SZ + GAP);
 
-      const isAttack = skillId === 'attack';
-      const mana     = isAttack ? 0 : (SKILL_BY_ID[skillId]?.active?.cost ?? 0);
-      const hasMana  = isAttack ? true : gs.player.stats.mana >= mana;
-
-      // Attack slot uses orange border; skill slots use blue/red
-      const isSelected = this._selectedSkillId === skillId;
-      const borderColor = isAttack
-        ? (isSelected ? 0x00cc44 : 0x886633)
-        : (isSelected ? 0x00cc44 : (hasMana ? 0x4455aa : 0x552222));
+      const isAttack    = skillId === 'attack';
+      const mana        = isAttack ? 0 : (SKILL_BY_ID[skillId]?.active?.cost ?? 0);
+      const hasMana     = isAttack ? true : gs.player.stats.mana >= mana;
+      const isSelected  = this._selectedSkillId === skillId;
+      const isPadFocused = gs?._controllerMode && i === (gs?._padHotbarIdx ?? 0);
+      // Attack slot uses orange border; skill slots use blue/red; pad-focused slot uses yellow
+      const borderColor = isPadFocused
+        ? (isSelected ? 0x00cc44 : 0xffdd00)
+        : isAttack
+          ? (isSelected ? 0x00cc44 : 0x886633)
+          : (isSelected ? 0x00cc44 : (hasMana ? 0x4455aa : 0x552222));
       const fillColor = isAttack
-        ? (isSelected ? 0x0d2210 : 0x181008)
-        : (isSelected ? 0x0d2210 : (hasMana ? 0x161622 : 0x160808));
+        ? (isSelected ? 0x0d2210 : (isPadFocused ? 0x201c00 : 0x181008))
+        : (isSelected ? 0x0d2210 : (isPadFocused ? 0x201c00 : (hasMana ? 0x161622 : 0x160808)));
 
       const bg = this.add.rectangle(sx + SZ / 2, HB_Y + SZ / 2, SZ, SZ, fillColor, 1)
-        .setStrokeStyle(isSelected ? 2 : 1, borderColor)
+        .setStrokeStyle((isSelected || isPadFocused) ? 2 : 1, borderColor)
         .setScrollFactor(0).setDepth(4).setInteractive({ useHandCursor: true });
 
       // Icon: attack uses equipped weapon sprite; skills use their skill icon
@@ -568,11 +575,17 @@ export class UIScene extends Phaser.Scene {
         .setDisplaySize(28, 28).setScrollFactor(0).setDepth(5);
       if (!hasMana) icon.setTint(0x333333);
 
-      // Green inner-border when selected
+      // Green inner-border when skill is queued for cast
       if (isSelected) {
         const sel = this.add.rectangle(sx + SZ / 2, HB_Y + SZ / 2, SZ - 6, SZ - 6, 0x000000, 0)
           .setStrokeStyle(2, 0x00ff66).setScrollFactor(0).setDepth(5.5);
         this._hotbarSlotObjects.push(sel);
+      }
+      // Yellow outer glow when controller has this slot focused
+      if (isPadFocused) {
+        const padRing = this.add.rectangle(sx + SZ / 2, HB_Y + SZ / 2, SZ + 6, SZ + 6, 0x000000, 0)
+          .setStrokeStyle(2, 0xffee00, 1).setScrollFactor(0).setDepth(3.5);
+        this._hotbarSlotObjects.push(padRing);
       }
 
       const numLbl = this.add.text(sx + 3, HB_Y + 2, `${i + 1}`, {
