@@ -203,15 +203,24 @@ export class GameScene extends Phaser.Scene {
     const now = Date.now();
 
     // ── Keyboard hold-to-walk (skip while targeting) ──────
+    // Compose direction from ALL currently-held movement keys so that e.g.
+    // holding W then pressing D gives a diagonal NE move.
     if (!this.targeting) {
+      let hdx = 0, hdy = 0, oldestPress = Infinity;
       for (const [code, pressTime] of Object.entries(this.heldKeys)) {
         const dir = this.moveKeys[code];
         if (!dir) continue;
-        const held = now - pressTime;
+        hdx += dir.dx;
+        hdy += dir.dy;
+        if (pressTime < oldestPress) oldestPress = pressTime;
+      }
+      hdx = Math.sign(hdx);
+      hdy = Math.sign(hdy);
+      if ((hdx !== 0 || hdy !== 0) && oldestPress !== Infinity) {
+        const held = now - oldestPress;
         if (held >= this.keyRepeat && now - this.lastMoveTime >= this.keyInterval) {
-          this._playerMove(dir.dx, dir.dy);
+          this._playerMove(hdx, hdy);
           this.lastMoveTime = now;
-          break;
         }
       }
     }
@@ -806,16 +815,25 @@ export class GameScene extends Phaser.Scene {
     const code = event.code;
     const now = Date.now();
 
-    // Move
+    // Move — compose direction from ALL currently-held movement keys so that
+    // pressing W+D simultaneously gives a diagonal NE move (same as gamepad).
     if (this.moveKeys[code]) {
-      const { dx, dy } = this.moveKeys[code];
-      this._playerMove(dx, dy);
+      let cdx = 0, cdy = 0;
+      for (const heldCode of Object.keys(this.heldKeys)) {
+        const d = this.moveKeys[heldCode];
+        if (d) { cdx += d.dx; cdy += d.dy; }
+      }
+      cdx = Math.sign(cdx);
+      cdy = Math.sign(cdy);
+      if (cdx !== 0 || cdy !== 0) this._playerMove(cdx, cdy);
       return;
     }
 
     // Actions
     switch (code) {
       case 'Space':  this._playerDefaultAction(); break;
+      case 'Numpad5': this._playerDefaultAction(); break; // numpad centre = interact
+      case 'Numpad0': this.useBaseAttack(); break;        // numpad 0 = attack nearest
       case 'KeyG':  this._playerPickUp(); break;
       case 'Period': this._endPlayerTurn(); break; // wait
       case 'Greater': case 'Period': break; // handled by _playerDescend

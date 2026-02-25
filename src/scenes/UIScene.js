@@ -83,9 +83,10 @@ export class UIScene extends Phaser.Scene {
 
     // Toggle minimap with M key
     this.input.keyboard.on('keydown-M', () => this._toggleMinimap());
-    // Skill hotkeys 1–8
+    // Skill hotkeys 1–8 — only main-row digit keys, NOT numpad
+    // (numpad digits are reserved for movement / classic roguelike controls)
     this.input.keyboard.on('keydown', (event) => {
-      if (event.key >= '1' && event.key <= '8') {
+      if (event.code.startsWith('Digit') && event.key >= '1' && event.key <= '8') {
         const idx = parseInt(event.key) - 1;
         const skillId = this._hotbarSkills?.[idx];
         if (skillId) this._useHotbarSkill(skillId);
