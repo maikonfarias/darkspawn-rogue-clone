@@ -366,6 +366,8 @@ export class GameScene extends Phaser.Scene {
       this.grid           = town.grid;
       this.rooms          = town.rooms;
       this.vis            = createVisGrid();
+      // Town is always fully revealed
+      revealAll(this.vis, this.grid);
       this._floorStartPos = town.startPos;
       this._floorEndPos   = town.endPos;
       // Player always starts at the town's designated start position
