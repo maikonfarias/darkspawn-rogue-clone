@@ -240,10 +240,6 @@ function genPlayer(scene) {
   g.fillStyle(0x3a2010, 1); g.fillRect(9, 2, 14, 4);
   // Eyes
   g.fillStyle(0x44aaff, 1); g.fillRect(12, 6, 3, 2); g.fillRect(17, 6, 3, 2);
-  // Sword
-  g.fillStyle(0xcccccc, 1); g.fillRect(25, 8, 2, 14);
-  g.fillStyle(0xccaa44, 1); g.fillRect(23, 13, 6, 2);
-  g.fillStyle(0x8b6914, 1); g.fillRect(25, 21, 2, 4);
   g.generateTexture('player', T, T);
   g.destroy();
 }
@@ -1107,6 +1103,7 @@ export function generateAllTextures(scene) {
   genSkillIcons(scene);
   genTownPortal(scene);
   genArmorOverlays(scene);
+  genWeaponOverlays(scene);
 
   for (const [id, def] of Object.entries(MONSTERS)) {
     genMonster(scene, id, def);
@@ -1139,6 +1136,68 @@ function genArmorOverlays(scene) {
   genArmorOverlay(scene, 'armor-overlay-plate',   0xc8c8d8, 0xeeeeee, 0xc8c8d8);
   genArmorOverlay(scene, 'armor-overlay-robe',    0x7733cc, 0xaa44ff);
   genArmorOverlay(scene, 'armor-overlay-dragon',  0xcc2222, 0xff5555, 0xcc2222);
+}
+
+// ── Weapon overlay textures ──────────────────────────────────────────────────
+function genWeaponOverlay(scene, key, drawFn) {
+  const g = scene.make.graphics({ add: false });
+  g.fillStyle(0x000000, 0); g.fillRect(0, 0, T, T);
+  drawFn(g);
+  g.generateTexture(key, T, T);
+  g.destroy();
+}
+
+function genWeaponOverlays(scene) {
+  // dagger — short blade, right side
+  genWeaponOverlay(scene, 'weapon-overlay-dagger', g => {
+    g.fillStyle(0xdddddd, 1); g.fillRect(25, 14, 2, 8);  // blade
+    g.fillStyle(0x998855, 1); g.fillRect(24, 18, 4, 1);  // guard
+    g.fillStyle(0x8b6914, 1); g.fillRect(25, 19, 2, 4);  // handle
+  });
+
+  // short sword
+  genWeaponOverlay(scene, 'weapon-overlay-shortsword', g => {
+    g.fillStyle(0xcccccc, 1); g.fillRect(25, 8, 2, 13);  // blade
+    g.fillStyle(0xccaa44, 1); g.fillRect(23, 14, 6, 2);  // guard
+    g.fillStyle(0x8b6914, 1); g.fillRect(25, 16, 2, 5);  // handle
+  });
+
+  // long sword — taller blade, silver tint
+  genWeaponOverlay(scene, 'weapon-overlay-longsword', g => {
+    g.fillStyle(0xe0e0f0, 1); g.fillRect(25, 4, 2, 17);  // blade
+    g.fillStyle(0xccaa44, 1); g.fillRect(23, 13, 6, 2);  // guard
+    g.fillStyle(0x8b6914, 1); g.fillRect(25, 15, 2, 5);  // handle
+    g.fillStyle(0xffffff, 0.5); g.fillRect(25, 4, 1, 8); // edge glint
+  });
+
+  // battle axe — large orange head, wooden handle right side
+  genWeaponOverlay(scene, 'weapon-overlay-battleaxe', g => {
+    g.fillStyle(0x8b6914, 1); g.fillRect(25, 12, 2, 14); // handle
+    g.fillStyle(0xcc7733, 1); g.fillRect(21, 8, 7, 9);   // head
+    g.fillStyle(0xddaa55, 1); g.fillRect(22, 9, 5, 5);   // highlight
+  });
+
+  // mage staff — tall staff on left side, orb at tip
+  genWeaponOverlay(scene, 'weapon-overlay-magestaff', g => {
+    g.fillStyle(0x8855aa, 1); g.fillRect(5, 6, 2, 22);   // staff body
+    g.fillStyle(0xaa44ff, 1); g.fillCircle(6, 5, 4);     // orb
+    g.fillStyle(0xddaaff, 0.7); g.fillCircle(5, 4, 2);   // orb glint
+  });
+
+  // war hammer — wide head, thick handle right side
+  genWeaponOverlay(scene, 'weapon-overlay-warhammer', g => {
+    g.fillStyle(0x8b6914, 1); g.fillRect(25, 14, 2, 13); // handle
+    g.fillStyle(0x888899, 1); g.fillRect(20, 7, 9, 8);   // head
+    g.fillStyle(0xaaaacc, 1); g.fillRect(21, 8, 7, 3);   // highlight
+  });
+
+  // runic blade — cyan glowing sword
+  genWeaponOverlay(scene, 'weapon-overlay-runicblade', g => {
+    g.fillStyle(0x44ffcc, 1); g.fillRect(25, 4, 2, 17);  // blade
+    g.fillStyle(0x00bbff, 1); g.fillRect(23, 13, 6, 2);  // guard
+    g.fillStyle(0x8b6914, 1); g.fillRect(25, 15, 2, 5);  // handle
+    g.fillStyle(0xaaffee, 0.6); g.fillRect(25, 4, 1, 8); // glow
+  });
 }
 
 export const TILE_TEXTURE = {

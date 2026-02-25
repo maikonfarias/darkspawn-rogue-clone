@@ -32,6 +32,16 @@ const ARMOR_OVERLAY = {
   dragonScale:  'armor-overlay-dragon',
 };
 
+const WEAPON_OVERLAY = {
+  dagger:     'weapon-overlay-dagger',
+  shortSword: 'weapon-overlay-shortsword',
+  longSword:  'weapon-overlay-longsword',
+  battleAxe:  'weapon-overlay-battleaxe',
+  mageStaff:  'weapon-overlay-magestaff',
+  warHammer:  'weapon-overlay-warhammer',
+  runicBlade: 'weapon-overlay-runicblade',
+};
+
 // ── Panel states ─────────────────────────────────────────────
 const PANEL = { NONE: 0, INVENTORY: 1, SKILLS: 2, CRAFTING: 3, CHAR: 4 };
 
@@ -90,7 +100,7 @@ export class GameScene extends Phaser.Scene {
     this.events_bus.on(EV.PAUSE_GAME,   () => { this.gamePaused = true; });
     this.events_bus.on(EV.RESUME_GAME,  () => { this.gamePaused = false; });
     this.events_bus.on('float-dmg', ({ x, y, dmg, color }) => this._showDamageNumber(x, y, dmg, color));
-    this.events_bus.on(EV.STATS_CHANGED, () => this._updateArmorOverlay());
+    this.events_bus.on(EV.STATS_CHANGED, () => { this._updateArmorOverlay(); this._updateWeaponOverlay(); });
 
     // Persistent graphics layers for status icons and AoE preview
     this._statusIconGraphics = this.add.graphics().setDepth(22);
@@ -575,6 +585,15 @@ export class GameScene extends Phaser.Scene {
     this.entityLayer.add(this._armorOverlaySprite);
     this._updateArmorOverlay();
 
+    // Weapon overlay (drawn over player sprite, texture swapped on equip change)
+    this._weaponOverlaySprite = this.add.image(
+      this.player.x * T + T / 2,
+      this.player.y * T + T / 2,
+      'weapon-overlay-shortsword'
+    ).setVisible(false);
+    this.entityLayer.add(this._weaponOverlaySprite);
+    this._updateWeaponOverlay();
+
     // HP bar above player
     this.playerHpBar = this._makeHealthBar(this.entityLayer, 0, 0, T, 4);
     this.entityLayer.add(this.playerHpBar.bg);
@@ -656,6 +675,18 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Swap the weapon overlay sprite texture to match the currently equipped weapon. */
+  _updateWeaponOverlay() {
+    if (!this._weaponOverlaySprite) return;
+    const weapon = this.player.equipment?.weapon;
+    const key = weapon ? WEAPON_OVERLAY[weapon.id] : null;
+    if (key) {
+      this._weaponOverlaySprite.setTexture(key).setVisible(true);
+    } else {
+      this._weaponOverlaySprite.setVisible(false);
+    }
+  }
+
   // ── FOV & Rendering ──────────────────────────────────────
 
   _updateFOV() {
@@ -732,9 +763,12 @@ export class GameScene extends Phaser.Scene {
 
     // Player sprite
     this.playerSprite.setPosition(this.player.x * T + T / 2, this.player.y * T + T / 2);
-    // Armor overlay — keep in sync with player
+    // Armor / weapon overlays — keep in sync with player
     if (this._armorOverlaySprite) {
       this._armorOverlaySprite.setPosition(this.playerSprite.x, this.playerSprite.y);
+    }
+    if (this._weaponOverlaySprite) {
+      this._weaponOverlaySprite.setPosition(this.playerSprite.x, this.playerSprite.y);
     }
 
     // Action hint above player on stairs / portal (Ⓐ ENTER with controller, ENTER with keyboard)
@@ -1026,17 +1060,6 @@ export class GameScene extends Phaser.Scene {
       this.floorItems.push({ x: monster.x, y: monster.y, item: createItem(id, qty) });
     }
     this._rebuildItemSprites();
-
-    // Check boss death → victory
-    if (monster.def.isBoss) {
-      this.time.delayedCall(1000, () => {
-        this.events_bus.emit(EV.PLAYER_WIN, {
-          floor: this.floor,
-          level: this.player.level,
-          gold: this.player.gold
-        });
-      });
-    }
   }
 
   /** Space / click-own-tile: pick up item → use stairs → wait */

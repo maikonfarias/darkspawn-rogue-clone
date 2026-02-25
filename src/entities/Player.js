@@ -129,11 +129,16 @@ export class Player {
     }
     const ok = addToInventory(this, item);
     if (ok) {
-      // Auto-equip if the item has an equipment slot and that slot is empty
+      // Auto-equip if slot is empty, or if the new item is strictly better.
+      // Never auto-replace mageRobe (armor) or mageStaff (weapon) — player chose those.
       if (item.slot) {
         const current = this.equipment[item.slot];
         const isEmpty = !current || current.id === 'fists' || current.id === 'rags';
-        if (isEmpty) {
+        const isProtected = current?.id === 'mageRobe' || current?.id === 'mageStaff';
+        const isBetter = item.slot === SLOT.ARMOR
+          ? (item.def ?? 0) > (current?.def ?? 0)
+          : (item.atk ?? 0) > (current?.atk ?? 0);
+        if (!isProtected && (isEmpty || isBetter)) {
           const invIdx = this.inventory.findIndex(s => s?.id === item.id && s?.slot === item.slot);
           if (invIdx !== -1) {
             this.equipItem(invIdx);
