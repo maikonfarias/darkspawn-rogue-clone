@@ -5,7 +5,7 @@
 import { SCENE, EV, C, VIS, TILE, MAP_W, MAP_H, ITEM_TYPE } from '../data/Constants.js';
 import { XP_TABLE } from '../data/Constants.js';
 import { SKILL_BY_ID, SKILL_TREES } from '../data/SkillData.js';
-import { ITEMS } from '../data/ItemData.js';
+import { ITEMS, createItem } from '../data/ItemData.js';
 import { getAvailableRecipes } from '../systems/CraftingSystem.js';
 import { saveGame } from '../systems/SaveSystem.js';
 import { Music } from '../systems/ProceduralMusic.js';
@@ -202,6 +202,31 @@ export class UIScene extends Phaser.Scene {
     // ── Instructions overlay: A or B closes ──
     if (this._instrClose) {
       if ((navA && !prev.a) || (navB && !prev.b)) this._instrClose();
+      this._pausePadPrev = { up: navUp, down: navDown, a: navA, b: navB };
+      return;
+    }
+
+    // ── Debug menu navigation ──
+    if (this._debugBtns) {
+      const now2 = Date.now();
+      const justUp2   = navUp   && !prev.up;
+      const justDown2 = navDown && !prev.down;
+      if (!navUp && !navDown) this._debugNavHeldSince = null;
+      let doNav2 = false;
+      if (justUp2 || justDown2) { this._debugNavHeldSince = now2; doNav2 = true; }
+      else if ((navUp || navDown) && this._debugNavHeldSince !== null) {
+        if (now2 - this._debugNavHeldSince >= 380 && now2 - (this._debugNavLastRepeat ?? 0) >= 160) doNav2 = true;
+      }
+      if (doNav2) {
+        this._debugNavLastRepeat = now2;
+        const dir2  = navUp ? -1 : 1;
+        const next2 = (this._debugSelIdx + dir2 + this._debugBtns.length) % this._debugBtns.length;
+        this._updateDebugSel(next2);
+      }
+      if (navA && !prev.a && this._debugBtns[this._debugSelIdx]) {
+        this._debugBtns[this._debugSelIdx].action();
+      }
+      if (navB && !prev.b) this._debugBtns[this._debugBtns.length - 1].action(); // Back
       this._pausePadPrev = { up: navUp, down: navDown, a: navA, b: navB };
       return;
     }
@@ -1428,19 +1453,19 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0).setDepth(50).setInteractive());
 
     // Panel box
-    const PW = 380, PH = 460;
+    const PW = 380, PH = 470;
     add(this.add.rectangle(W / 2, H / 2, PW, PH, 0x0a0a14, 0.97)
       .setScrollFactor(0).setDepth(51).setStrokeStyle(2, 0x334466));
 
-    add(this.add.text(W / 2, H / 2 - 165, '❚❚  PAUSED', {
+    add(this.add.text(W / 2, H / 2 - 168, '❚❚  PAUSED', {
       fontFamily: 'Courier New', fontSize: '26px', color: '#ffd700',
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(52));
 
     const mkBtn = (label, y, color, cb) => {
       const btn = add(this.add.text(W / 2, y, label, {
-        fontFamily: 'Courier New', fontSize: '18px', color,
-        backgroundColor: '#111122', padding: { x: 22, y: 9 },
+        fontFamily: 'Courier New', fontSize: '16px', color,
+        backgroundColor: '#111122', padding: { x: 16, y: 7 },
       }).setOrigin(0.5).setScrollFactor(0).setDepth(52).setInteractive({ useHandCursor: true }));
       btn.on('pointerover', () => btn.setAlpha(0.75));
       btn.on('pointerout',  () => btn.setAlpha(1));
@@ -1470,6 +1495,7 @@ export class UIScene extends Phaser.Scene {
       if (gs2) gs2._openPanel(2); // PANEL.SKILLS = 2
     };
     const helpAction  = () => this._showInstructions();
+    const debugAction = () => this._openDebugMenu();
     const menuAction  = () => {
       this.bus.emit(EV.RESUME_GAME);
       this.scene.stop(SCENE.UI);
@@ -1478,11 +1504,12 @@ export class UIScene extends Phaser.Scene {
     };
 
     this._pauseBtns = [
-      { obj: mkBtn('[ CONTINUE ]', H / 2 - 80,  '#44ff88', continueAction), action: continueAction },
-      { obj: mkBtn('[ SAVE GAME ]', H / 2 - 20,  '#ffd700', saveAction),    action: saveAction     },
-      { obj: mkBtn(skillLabel,      H / 2 + 40,  '#88aaff', skillsAction),  action: skillsAction   },
-      { obj: mkBtn('[ HOW TO PLAY ]', H / 2 + 100, '#88aaff', helpAction),  action: helpAction     },
-      { obj: mkBtn('[ MAIN MENU ]',   H / 2 + 160, '#ff8888', menuAction),  action: menuAction     },
+      { obj: mkBtn('[ CONTINUE ]',    H / 2 - 90,  '#44ff88', continueAction), action: continueAction },
+      { obj: mkBtn('[ SAVE GAME ]',   H / 2 - 42,  '#ffd700', saveAction),    action: saveAction     },
+      { obj: mkBtn(skillLabel,         H / 2 + 6,   '#88aaff', skillsAction),  action: skillsAction   },
+      { obj: mkBtn('[ HOW TO PLAY ]', H / 2 + 54,  '#88aaff', helpAction),    action: helpAction     },
+      { obj: mkBtn('[ DEBUG ]',        H / 2 + 102, '#ff88ff', debugAction),   action: debugAction    },
+      { obj: mkBtn('[ MAIN MENU ]',   H / 2 + 150, '#ff8888', menuAction),    action: menuAction     },
     ];
 
     // Gamepad cursor
@@ -1496,12 +1523,12 @@ export class UIScene extends Phaser.Scene {
     this._updatePauseSel(0);
 
     // ── Audio toggles ────────────────────────────────────────
-    add(this.add.text(W / 2, H / 2 + 208, '── Audio ──', {
+    add(this.add.text(W / 2, H / 2 + 195, '── Audio ──', {
       fontFamily: 'Courier New', fontSize: '13px', color: '#445566',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(52));
 
     const mkToggle = (label, x, stateFn, action) => {
-      const btn = add(this.add.text(x, H / 2 + 228, label + (stateFn() ? 'ON' : 'OFF'), {
+      const btn = add(this.add.text(x, H / 2 + 215, label + (stateFn() ? 'ON' : 'OFF'), {
         fontFamily: 'Courier New', fontSize: '14px', color: '#88aacc',
         backgroundColor: '#111122', padding: { x: 12, y: 7 },
       }).setOrigin(0.5).setScrollFactor(0).setDepth(52).setInteractive({ useHandCursor: true }));
@@ -1536,8 +1563,114 @@ export class UIScene extends Phaser.Scene {
     this._pauseItems = items;
   }
 
+  _openDebugMenu() {
+    const W = this.cameras.main.width;
+    const H = this.cameras.main.height;
+    const items = [];
+    const add = (o) => { items.push(o); return o; };
+
+    // Overlay on top of pause menu
+    add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.55)
+      .setScrollFactor(0).setDepth(60).setInteractive());
+
+    const PW = 340, PH = 340;
+    add(this.add.rectangle(W / 2, H / 2, PW, PH, 0x080810, 0.98)
+      .setScrollFactor(0).setDepth(61).setStrokeStyle(2, 0x553388));
+
+    add(this.add.text(W / 2, H / 2 - 145, '🛠  DEBUG MENU', {
+      fontFamily: 'Courier New', fontSize: '20px', color: '#ff88ff',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(62));
+
+    const gs = this.scene.get(SCENE.GAME);
+
+    const mkDbgBtn = (label, y, cb) => {
+      const btn = add(this.add.text(W / 2, y, label, {
+        fontFamily: 'Courier New', fontSize: '16px', color: '#ddaaff',
+        backgroundColor: '#110a22', padding: { x: 18, y: 8 },
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(62).setInteractive({ useHandCursor: true }));
+      btn.on('pointerover', () => btn.setAlpha(0.75));
+      btn.on('pointerout',  () => btn.setAlpha(1));
+      btn.on('pointerdown', cb);
+      return btn;
+    };
+
+    const townScrollAction = () => {
+      if (gs?.player) {
+        gs.player.pickUpItem(createItem('townScroll'));
+      }
+    };
+    const levelUpAction = () => {
+      if (gs?.player) {
+        const needed = Math.max(1, gs.player.xpToNext - gs.player.xp);
+        gs.player.addXP(needed);
+      }
+    };
+    const revealFloorAction = () => {
+      if (gs?.player) {
+        gs.player.pickUpItem(createItem('scrollMap'));
+      }
+    };
+    const backAction = () => {
+      for (const o of items) o.destroy();
+      this._debugItems  = null;
+      this._debugBtns   = null;
+      this._debugCursor = null;
+      if (this._debugEscHandler) {
+        this.input.keyboard.off('keydown-ESC', this._debugEscHandler);
+        this._debugEscHandler = null;
+      }
+      // Restore pause navigation
+      this._pauseBtns.forEach((item, i) => item.obj.setAlpha(i === this._pauseSelIdx ? 1.0 : 0.45));
+    };
+
+    this._debugBtns = [
+      { obj: mkDbgBtn('[ TOWN SCROLL ]',      H / 2 - 60,  townScrollAction),  action: townScrollAction  },
+      { obj: mkDbgBtn('[ LEVEL UP ]',          H / 2 - 10,  levelUpAction),     action: levelUpAction     },
+      { obj: mkDbgBtn('[ SCROLL OF MAPPING ]', H / 2 + 40,  revealFloorAction), action: revealFloorAction },
+      { obj: mkDbgBtn('[ BACK ]',              H / 2 + 100, backAction),         action: backAction        },
+    ];
+
+    // Gamepad cursor for debug menu
+    this._debugCursor = add(this.add.text(0, 0, '►', {
+      fontFamily: 'Courier New', fontSize: '16px', color: '#ffffff',
+    }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(63).setVisible(false));
+
+    this._debugSelIdx       = 0;
+    this._debugPadPrev      = { up: false, down: false, a: false, b: false };
+    this._debugNavHeldSince = null;
+    this._updateDebugSel(0);
+
+    this._debugEscHandler = () => backAction();
+    this.input.keyboard.on('keydown-ESC', this._debugEscHandler);
+
+    this._debugItems = items;
+  }
+
+  _updateDebugSel(idx) {
+    this._debugSelIdx = idx;
+    this._debugBtns.forEach((item, i) => item.obj.setAlpha(i === idx ? 1.0 : 0.45));
+    const sel = this._debugBtns[idx];
+    if (sel && this._debugCursor) {
+      this._debugCursor
+        .setPosition(sel.obj.x - sel.obj.displayWidth / 2 - 8, sel.obj.y)
+        .setVisible(true);
+    }
+  }
+
   _closePauseMenu() {
     if (!this._pauseItems) return;
+    // Also clean up debug menu if it was open
+    if (this._debugItems) {
+      for (const o of this._debugItems) o.destroy();
+      this._debugItems  = null;
+      this._debugBtns   = null;
+      this._debugCursor = null;
+      if (this._debugEscHandler) {
+        this.input.keyboard.off('keydown-ESC', this._debugEscHandler);
+        this._debugEscHandler = null;
+      }
+    }
     for (const o of this._pauseItems) o.destroy();
     this._pauseItems  = null;
     this._pauseBtns   = null;
