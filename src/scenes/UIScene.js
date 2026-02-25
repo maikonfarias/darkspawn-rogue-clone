@@ -530,27 +530,40 @@ export class UIScene extends Phaser.Scene {
     if (!gs?.player || !this._hotbarSZ) return;
 
     const unlocked = ACTIVE_SKILL_ORDER.filter(id => gs.player.skills.has(id));
-    this._hotbarSkills = unlocked;
-    if (unlocked.length === 0) return;
+    // 'attack' is always slot 0 — the base melee attack using the equipped weapon
+    const allSlots = ['attack', ...unlocked];
+    this._hotbarSkills = allSlots;
 
     const SZ = this._hotbarSZ, GAP = this._hotbarGAP;
-    const totalW     = unlocked.length * (SZ + GAP) - GAP;
+    const totalW     = allSlots.length * (SZ + GAP) - GAP;
     const centerX    = this._hotbarCenterX ?? (this._hotbarColStartX ?? 0) + (this._hotbarW - (this._hotbarColStartX ?? 0)) / 2;
     const startX     = centerX - totalW / 2;
     const HB_Y   = this._hotbarY;
 
-    unlocked.forEach((skillId, i) => {
+    allSlots.forEach((skillId, i) => {
       const sx = startX + i * (SZ + GAP);
-      const mana     = SKILL_BY_ID[skillId]?.active?.cost ?? 0;
-      const hasMana  = gs.player.stats.mana >= mana;
 
+      const isAttack = skillId === 'attack';
+      const mana     = isAttack ? 0 : (SKILL_BY_ID[skillId]?.active?.cost ?? 0);
+      const hasMana  = isAttack ? true : gs.player.stats.mana >= mana;
+
+      // Attack slot uses orange border; skill slots use blue/red
       const isSelected = this._selectedSkillId === skillId;
-      const bg = this.add.rectangle(sx + SZ / 2, HB_Y + SZ / 2, SZ, SZ,
-        isSelected ? 0x0d2210 : (hasMana ? 0x161622 : 0x160808), 1)
-        .setStrokeStyle(isSelected ? 2 : 1, isSelected ? 0x00cc44 : (hasMana ? 0x4455aa : 0x552222))
+      const borderColor = isAttack
+        ? (isSelected ? 0x00cc44 : 0x886633)
+        : (isSelected ? 0x00cc44 : (hasMana ? 0x4455aa : 0x552222));
+      const fillColor = isAttack
+        ? (isSelected ? 0x0d2210 : 0x181008)
+        : (isSelected ? 0x0d2210 : (hasMana ? 0x161622 : 0x160808));
+
+      const bg = this.add.rectangle(sx + SZ / 2, HB_Y + SZ / 2, SZ, SZ, fillColor, 1)
+        .setStrokeStyle(isSelected ? 2 : 1, borderColor)
         .setScrollFactor(0).setDepth(4).setInteractive({ useHandCursor: true });
 
-      const icon = this.add.image(sx + SZ / 2, HB_Y + SZ / 2 - 5, `skill-${skillId}`)
+      // Icon: attack uses equipped weapon sprite; skills use their skill icon
+      const weaponId = gs.player.equipment?.weapon?.id ?? 'fists';
+      const iconKey  = isAttack ? `item-${weaponId}` : `skill-${skillId}`;
+      const icon = this.add.image(sx + SZ / 2, HB_Y + SZ / 2 - 5, iconKey)
         .setDisplaySize(28, 28).setScrollFactor(0).setDepth(5);
       if (!hasMana) icon.setTint(0x333333);
 
@@ -562,26 +575,38 @@ export class UIScene extends Phaser.Scene {
       }
 
       const numLbl = this.add.text(sx + 3, HB_Y + 2, `${i + 1}`, {
-        fontFamily: 'Courier New', fontSize: '9px', color: '#6677bb',
+        fontFamily: 'Courier New', fontSize: '9px', color: isAttack ? '#aa8844' : '#6677bb',
       }).setScrollFactor(0).setDepth(5);
 
-      const costLbl = this.add.text(sx + SZ / 2, HB_Y + SZ - 4, `${mana}mp`, {
-        fontFamily: 'Courier New', fontSize: '8px',
-        color: hasMana ? '#5566cc' : '#663333',
-      }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(5);
+      // Attack slot shows no mana cost; skill slots show Xmp
+      const costLbl = isAttack
+        ? null
+        : this.add.text(sx + SZ / 2, HB_Y + SZ - 4, `${mana}mp`, {
+            fontFamily: 'Courier New', fontSize: '8px',
+            color: hasMana ? '#5566cc' : '#663333',
+          }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(5);
 
-      bg.on('pointerover', () => bg.setFillStyle(isSelected ? 0x113318 : (hasMana ? 0x222233 : 0x210d0d)));
-      bg.on('pointerout',  () => bg.setFillStyle(isSelected ? 0x0d2210 : (hasMana ? 0x161622 : 0x160808)));
+      const hoverFill = isAttack ? 0x251a08 : (hasMana ? 0x222233 : 0x210d0d);
+      const outFill   = fillColor;
+      bg.on('pointerover', () => bg.setFillStyle(hoverFill));
+      bg.on('pointerout',  () => bg.setFillStyle(outFill));
       bg.on('pointerdown', () => this._useHotbarSkill(skillId));
 
       // Tooltip on hover
-      const def = SKILL_BY_ID[skillId];
-      bg.on('pointerover', () => {
-        bg.setFillStyle(hasMana ? 0x222233 : 0x210d0d);
-        this.bus.emit(EV.LOG_MSG, { text: `[${i+1}] ${def.name} (${mana}mp) — ${def.description}`, color: '#8899cc' });
-      });
+      if (isAttack) {
+        bg.on('pointerover', () => {
+          bg.setFillStyle(hoverFill);
+          this.bus.emit(EV.LOG_MSG, { text: '[1] Attack — strike nearest enemy (lowest HP). Free.', color: '#bbaa66' });
+        });
+      } else {
+        const def = SKILL_BY_ID[skillId];
+        bg.on('pointerover', () => {
+          bg.setFillStyle(hoverFill);
+          this.bus.emit(EV.LOG_MSG, { text: `[${i+1}] ${def.name} (${mana}mp) — ${def.description}`, color: '#8899cc' });
+        });
+      }
 
-      this._hotbarSlotObjects.push(bg, icon, numLbl, costLbl);
+      this._hotbarSlotObjects.push(bg, icon, numLbl, ...(costLbl ? [costLbl] : []));
     });
   }
 
@@ -593,6 +618,14 @@ export class UIScene extends Phaser.Scene {
   _useHotbarSkill(skillId) {
     const gs = this.scene.get(SCENE.GAME);
     if (!gs || gs.gamePaused || gs.activePanel !== 0) return;
+
+    // Base attack — instant, no selection step needed
+    if (skillId === 'attack') {
+      this._clearSkillSelection();
+      gs.useBaseAttack();
+      this.time.delayedCall(50, () => this._refreshSkillHotbar());
+      return;
+    }
 
     const isTargetable = TARGETABLE_SKILLS.has(skillId);
 

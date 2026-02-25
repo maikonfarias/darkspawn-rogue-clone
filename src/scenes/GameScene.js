@@ -1202,6 +1202,29 @@ export class GameScene extends Phaser.Scene {
 
   // ── Active Skills (targeting) ─────────────────────────────
 
+  /**
+   * Base "Attack" skill — free, no mana cost.
+   * Attacks the adjacent (8-dir) living monster with the lowest HP.
+   * If none are adjacent, skips the turn with a "No target." message.
+   */
+  useBaseAttack() {
+    const adjacent = this.monsters.filter(m =>
+      !m.isDead &&
+      Math.abs(m.x - this.player.x) <= 1 &&
+      Math.abs(m.y - this.player.y) <= 1 &&
+      !(m.x === this.player.x && m.y === this.player.y)
+    );
+    if (adjacent.length === 0) {
+      this.events_bus.emit(EV.LOG_MSG, { text: 'No target.', color: '#778899' });
+      this._endPlayerTurn();
+      return;
+    }
+    // Pick the target with the lowest current HP
+    const target = adjacent.reduce((a, b) => a.stats.hp < b.stats.hp ? a : b);
+    this._playerAttack(target);
+    this._endPlayerTurn();
+  }
+
   useActiveSkill(skillId) {
     const result = useSkill(this.player, skillId);
     if (!result.success) {
