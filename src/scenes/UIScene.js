@@ -1159,7 +1159,9 @@ export class UIScene extends Phaser.Scene {
 
         if (v === VIS.EXPLORED) {
           // Dim — seen but not currently lit
-          if (t === TILE.WALL)          color = 0x1a2233;
+          // Wall tiles are skipped so they render as black background,
+          // making the map layout readable (especially after scroll of mapping).
+          if (t === TILE.WALL)          continue;
           else if (t === TILE.STAIRS_DOWN) color = 0x1c4444;
           else if (t === TILE.STAIRS_UP)   color = 0x443c18;
           else                             color = 0x1b2535;
