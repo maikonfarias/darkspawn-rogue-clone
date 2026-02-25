@@ -142,6 +142,39 @@ export function deleteSave() {
   localStorage.removeItem(SAVE_KEY);
 }
 
+// ── In-memory save (checkpoint / retry) ──────────────────────
+
+/**
+ * Serialize full game state to a plain object (no localStorage).
+ * The returned object can be passed to deserializeMemorySave() to
+ * recreate properly typed data (Monster instances, Maps, etc.).
+ */
+export function createMemorySave(gs) {
+  gs._saveCurrentFloor();
+  const floorCacheObj = {};
+  for (const [k, v] of gs.floorCache) {
+    floorCacheObj[k] = serializeFloorEntry(v);
+  }
+  return {
+    version:    2,
+    floor:      gs.floor,
+    player:     serializePlayer(gs.player),
+    floorCache: floorCacheObj,
+  };
+}
+
+/**
+ * Deserialize a value created by createMemorySave() into the same
+ * shape that loadGame() returns (floorCache as a Map, Monster instances).
+ */
+export function deserializeMemorySave(save) {
+  const floorCache = new Map();
+  for (const [k, v] of Object.entries(save.floorCache)) {
+    floorCache.set(Number(k), deserializeFloorEntry(v));
+  }
+  return { ...save, floorCache };
+}
+
 /** Human-readable timestamp for the save. */
 export function saveTimestamp() {
   try {

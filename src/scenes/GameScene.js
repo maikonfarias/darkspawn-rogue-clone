@@ -18,7 +18,7 @@ import { rand, chance, pick, weightedPick } from '../utils/Random.js';
 import { findPath } from '../systems/AStarPathfinder.js';
 import { SKILL_TREES, SKILL_BY_ID } from '../data/SkillData.js';
 import { RECIPES } from '../data/RecipeData.js';
-import { saveGame, loadGame } from '../systems/SaveSystem.js';
+import { saveGame, loadGame, createMemorySave, deserializeMemorySave } from '../systems/SaveSystem.js';
 import { Music, themeForFloor } from '../systems/ProceduralMusic.js';
 import { SFX } from '../systems/SoundEffects.js';
 
@@ -49,6 +49,7 @@ export class GameScene extends Phaser.Scene {
     this.targetCallback = null;
     this.gamePaused = false;
     this.floorCache = new Map(); // stores saved floor state keyed by floor number
+    this._floorCheckpoint = null; // in-memory snapshot: player state on entering each floor
     this._floorStartPos = null;
     this._floorEndPos   = null;
     this._clickPath      = [];
@@ -61,9 +62,12 @@ export class GameScene extends Phaser.Scene {
 
     this._setupInput();
 
-    // Load from save if requested by MenuScene
-    const savedData = this.scene.settings.data?.loadSave ? loadGame() : null;
-    if (savedData) {
+    // Load from save / checkpoint if requested
+    const checkpoint = this.scene.settings.data?.checkpoint ?? null;
+    const savedData  = !checkpoint && this.scene.settings.data?.loadSave ? loadGame() : null;
+    if (checkpoint) {
+      this._restoreFromCheckpoint(checkpoint);
+    } else if (savedData) {
       this._loadSave(savedData);
     } else {
       this._loadFloor(this.floor);
@@ -448,6 +452,12 @@ export class GameScene extends Phaser.Scene {
 
     // Adapt music atmosphere to the new floor depth
     Music.play(themeForFloor(floorNum));
+
+    // Take a full checkpoint after the floor is fully built so retry restores
+    // the identical layout (uses the same deep-copy serialization as save/load).
+    if (floorNum > 0) {
+      this._floorCheckpoint = createMemorySave(this);
+    }
   }
 
   // ── Spawning ─────────────────────────────────────────────
@@ -1062,6 +1072,18 @@ export class GameScene extends Phaser.Scene {
         return;
       }
     }
+  }
+
+  /** Restore from an in-memory checkpoint (same pipeline as real save/load). */
+  _restoreFromCheckpoint(cp) {
+    const data = deserializeMemorySave(cp);
+    // Restore using the identical code path as continuing a saved game
+    this._loadSave(data);
+    // Override HP/mana to full so player gets a fair retry
+    this.player.stats.hp   = this.player.stats.maxHp;
+    this.player.stats.mana = this.player.stats.maxMana;
+    this.player.statusEffects = [];
+    this.events_bus.emit(EV.STATS_CHANGED);
   }
 
   _saveCurrentFloor() {
@@ -2279,6 +2301,7 @@ export class GameScene extends Phaser.Scene {
       floor: this.floor,
       level: this.player.level,
       gold: this.player.gold,
+      checkpoint: this._floorCheckpoint ?? null,
     });
   }
 
