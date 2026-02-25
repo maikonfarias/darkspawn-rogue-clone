@@ -1574,6 +1574,7 @@ export class GameScene extends Phaser.Scene {
     this.targeting = false;
     if (this._aoeGraphics) this._aoeGraphics.clear();
     this._clearTargetGrid();
+    this._padValidTiles = null;
     if (emitEvent) this.events_bus?.emit('skill-selection-done');
   }
 
@@ -1619,8 +1620,10 @@ export class GameScene extends Phaser.Scene {
 
   /** Move the gamepad targeting reticle by (dx, dy) tiles and refresh the visual. */
   _movePadTarget(dx, dy) {
-    this._padTargetX = Math.max(0, Math.min(MAP_W - 1, this._padTargetX + dx));
-    this._padTargetY = Math.max(0, Math.min(MAP_H - 1, this._padTargetY + dy));
+    const nx = Math.max(0, Math.min(MAP_W - 1, this._padTargetX + dx));
+    const ny = Math.max(0, Math.min(MAP_H - 1, this._padTargetY + dy));
+    this._padTargetX = nx;
+    this._padTargetY = ny;
     this._drawTargetPreview(this._padTargetX, this._padTargetY);
   }
 
@@ -1743,6 +1746,7 @@ export class GameScene extends Phaser.Scene {
       this._clearTargetGrid();
       this._padTargetGridGraphics = this.add.graphics().setDepth(14);
       const g = this._padTargetGridGraphics;
+      this._padValidTiles = new Set();
       let firstValid = null;
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
@@ -1753,6 +1757,7 @@ export class GameScene extends Phaser.Scene {
           if (tile === TILE.WALL || tile === TILE.VOID || tile === undefined) continue;
           g.fillStyle(0x00ff88, 0.20); g.fillRect(tx * T, ty * T, T, T);
           g.lineStyle(1, 0x00ff88, 0.7); g.strokeRect(tx * T, ty * T, T, T);
+          this._padValidTiles.add(`${tx},${ty}`);
           if (!firstValid) firstValid = { x: tx, y: ty };
         }
       }
@@ -2002,6 +2007,12 @@ export class GameScene extends Phaser.Scene {
         this.events_bus.emit(EV.LOG_MSG, { text: `${m.name} is marked for death!`, color: '#ff44ff' });
       }
     } else if (mode === 'melee-attack') {
+      // Guard: only act if the tile is one of the valid green melee tiles
+      if (this._padValidTiles && !this._padValidTiles.has(`${tx},${ty}`)) {
+        this.events_bus.emit(EV.LOG_MSG, { text: 'Out of melee range!', color: '#ff8888' });
+        this._endPlayerTurn();
+        return;
+      }
       const m = this.monsters.find(mon => mon.x === tx && mon.y === ty && !mon.isDead);
       if (m) {
         this._playerAttack(m);
