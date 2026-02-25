@@ -77,24 +77,24 @@ export function createItem(id, qty = 1) {
 
 // Weighted random item tables per floor
 export const FLOOR_ITEM_TABLES = [
-  // floor 1
+  // floor 1 – scripted intro; only basic supplies
+  [{ id:'potionHpS', weight:5 }, { id:'wood', weight:3 }, { id:'stone', weight:3 }, { id:'bone', weight:2 }, { id:'dagger', weight:1 }],
+  // floor 2 – was floor 1
   [{ id:'potionHpS', weight:4 }, { id:'wood', weight:3 }, { id:'stone', weight:3 }, { id:'ironOre', weight:2 }, { id:'dagger', weight:2 }, { id:'leatherArmor', weight:1 }],
-  // floor 2
+  // floor 3 – was floor 2
   [{ id:'potionHpS', weight:3 }, { id:'potionHpM', weight:2 }, { id:'ironOre', weight:3 }, { id:'wood', weight:2 }, { id:'shortSword', weight:2 }, { id:'leatherArmor', weight:2 }, { id:'townScroll', weight:1 }],
-  // floor 3
+  // floor 4 – was floor 3
   [{ id:'potionHpM', weight:3 }, { id:'ironIngot', weight:2 }, { id:'leatherHide', weight:3 }, { id:'chainMail', weight:1 }, { id:'antidote', weight:2 }, { id:'scrollMap', weight:1 }, { id:'townScroll', weight:1 }],
-  // floor 4
+  // floor 5 – was floor 4
   [{ id:'potionHpM', weight:3 }, { id:'potionMana', weight:2 }, { id:'ironIngot', weight:3 }, { id:'crystal', weight:1 }, { id:'longSword', weight:1 }, { id:'scrollTele', weight:1 }, { id:'townScroll', weight:1 }],
-  // floor 5
+  // floor 6 – was floor 5
   [{ id:'potionHpL', weight:2 }, { id:'potionMana', weight:2 }, { id:'crystal', weight:2 }, { id:'bone', weight:2 }, { id:'battleAxe', weight:1 }, { id:'ironRing', weight:2 }, { id:'boneAmulet', weight:1 }, { id:'townScroll', weight:1 }],
-  // floor 6
-  [{ id:'potionHpL', weight:3 }, { id:'crystal', weight:3 }, { id:'gemRuby', weight:1 }, { id:'gemSapphire', weight:1 }, { id:'plateArmor', weight:1 }, { id:'goldRing', weight:1 }, { id:'townScroll', weight:1 }],
-  // floor 7
-  [{ id:'potionHpL', weight:3 }, { id:'scrollFire', weight:2 }, { id:'mageStaff', weight:1 }, { id:'mageRobe', weight:1 }, { id:'rubyRing', weight:1 }, { id:'moonstone', weight:1 }, { id:'townScroll', weight:1 }],
-  // floor 8
+  // floor 7 – blends old floors 6 and 7 (gems, plate armour, magic gear)
+  [{ id:'potionHpL', weight:3 }, { id:'crystal', weight:2 }, { id:'gemRuby', weight:1 }, { id:'plateArmor', weight:1 }, { id:'mageStaff', weight:1 }, { id:'mageRobe', weight:1 }, { id:'goldRing', weight:1 }, { id:'moonstone', weight:1 }, { id:'scrollFire', weight:2 }, { id:'townScroll', weight:1 }],
+  // floor 8 – unchanged
   [{ id:'potionHpL', weight:3 }, { id:'potionMana', weight:3 }, { id:'warHammer', weight:1 }, { id:'dragonScale2', weight:2 }, { id:'dragonEye', weight:1 }, { id:'townScroll', weight:1 }],
-  // floor 9
+  // floor 9 – unchanged
   [{ id:'potionHpL', weight:4 }, { id:'runicBlade', weight:1 }, { id:'dragonScale', weight:1 }, { id:'dragonEye', weight:1 }, { id:'scrollFire', weight:2 }, { id:'townScroll', weight:1 }],
-  // floor 10 (boss)
+  // floor 10 (boss) – unchanged
   [{ id:'potionHpL', weight:4 }, { id:'runicBlade', weight:1 }, { id:'dragonScale', weight:1 }],
 ];

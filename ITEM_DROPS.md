@@ -117,7 +117,19 @@ Items spawn on the dungeon floor using a **weighted random table** per floor. Th
 
 > **Gold piles** also spawn separately (2–4 per floor), with `5–15 × floor` gold each.
 
-#### Floor 1 (Total weight: 15)
+#### Floor 1 — Scripted Intro (Total weight: 14)
+
+Floor 1 is a hand-crafted intro level. Items here are purely basic supplies; no armour or advanced gear.
+
+| Item             | Weight | Drop Chance |
+|------------------|--------|-------------|
+| `potionHpS`      | 5      | 35.7%       |
+| `wood`           | 3      | 21.4%       |
+| `stone`          | 3      | 21.4%       |
+| `bone`           | 2      | 14.3%       |
+| `dagger`         | 1      | 7.1%        |
+
+#### Floor 2 (Total weight: 15)
 
 | Item             | Weight | Drop Chance |
 |------------------|--------|-------------|
@@ -128,7 +140,7 @@ Items spawn on the dungeon floor using a **weighted random table** per floor. Th
 | `dagger`         | 2      | 13.3%       |
 | `leatherArmor`   | 1      | 6.7%        |
 
-#### Floor 2 (Total weight: 15)
+#### Floor 3 (Total weight: 15)
 
 | Item             | Weight | Drop Chance |
 |------------------|--------|-------------|
@@ -140,7 +152,7 @@ Items spawn on the dungeon floor using a **weighted random table** per floor. Th
 | `leatherArmor`   | 2      | 13.3%       |
 | `townScroll`     | 1      | 6.7%        |
 
-#### Floor 3 (Total weight: 13)
+#### Floor 4 (Total weight: 13)
 
 | Item             | Weight | Drop Chance |
 |------------------|--------|-------------|
@@ -152,7 +164,7 @@ Items spawn on the dungeon floor using a **weighted random table** per floor. Th
 | `scrollMap`      | 1      | 7.7%        |
 | `townScroll`     | 1      | 7.7%        |
 
-#### Floor 4 (Total weight: 12)
+#### Floor 5 (Total weight: 12)
 
 | Item             | Weight | Drop Chance |
 |------------------|--------|-------------|
@@ -164,7 +176,7 @@ Items spawn on the dungeon floor using a **weighted random table** per floor. Th
 | `scrollTele`     | 1      | 8.3%        |
 | `townScroll`     | 1      | 8.3%        |
 
-#### Floor 5 (Total weight: 13)
+#### Floor 6 (Total weight: 13)
 
 | Item             | Weight | Drop Chance |
 |------------------|--------|-------------|
@@ -177,29 +189,22 @@ Items spawn on the dungeon floor using a **weighted random table** per floor. Th
 | `boneAmulet`     | 1      | 7.7%        |
 | `townScroll`     | 1      | 7.7%        |
 
-#### Floor 6 (Total weight: 11)
+#### Floor 7 — Magic Tier (Total weight: 14)
+
+Floor 7 blends the gem/plate tier and the magic gear tier since floors 8–10 are unchanged.
 
 | Item             | Weight | Drop Chance |
 |------------------|--------|-------------|
-| `potionHpL`      | 3      | 27.3%       |
-| `crystal`        | 3      | 27.3%       |
-| `gemRuby`        | 1      | 9.1%        |
-| `gemSapphire`    | 1      | 9.1%        |
-| `plateArmor`     | 1      | 9.1%        |
-| `goldRing`       | 1      | 9.1%        |
-| `townScroll`     | 1      | 9.1%        |
-
-#### Floor 7 (Total weight: 10)
-
-| Item             | Weight | Drop Chance |
-|------------------|--------|-------------|
-| `potionHpL`      | 3      | 30.0%       |
-| `scrollFire`     | 2      | 20.0%       |
-| `mageStaff`      | 1      | 10.0%       |
-| `mageRobe`       | 1      | 10.0%       |
-| `rubyRing`       | 1      | 10.0%       |
-| `moonstone`      | 1      | 10.0%       |
-| `townScroll`     | 1      | 10.0%       |
+| `potionHpL`      | 3      | 21.4%       |
+| `crystal`        | 2      | 14.3%       |
+| `scrollFire`     | 2      | 14.3%       |
+| `gemRuby`        | 1      | 7.1%        |
+| `plateArmor`     | 1      | 7.1%        |
+| `mageStaff`      | 1      | 7.1%        |
+| `mageRobe`       | 1      | 7.1%        |
+| `goldRing`       | 1      | 7.1%        |
+| `moonstone`      | 1      | 7.1%        |
+| `townScroll`     | 1      | 7.1%        |
 
 #### Floor 8 (Total weight: 11)
 
@@ -241,25 +246,25 @@ Each monster has a loot table. Every entry is rolled **independently** with its 
 
 | Monster         | Floor Range | Loot Entry      | Drop Chance | Qty              |
 |-----------------|-------------|-----------------|-------------|------------------|
-| Giant Rat       | 1–3         | `bone`          | 40%         | 1                |
-| Goblin          | 1–4         | `wood`          | 30%         | 1                |
+| Giant Rat       | 2–4         | `bone`          | 40%         | 1                |
+| Goblin          | 2–5         | `wood`          | 30%         | 1                |
 |                 |             | `potionHpS`     | 20%         | 1                |
 |                 |             | `gold`          | 50%         | 3–10             |
-| Skeleton        | 2–6         | `bone`          | 60%         | 1                |
+| Skeleton        | 3–7         | `bone`          | 60%         | 1                |
 |                 |             | `ironOre`       | 20%         | 1                |
-| Orc Warrior     | 3–7         | `ironOre`       | 40%         | 1                |
+| Orc Warrior     | 4–8         | `ironOre`       | 40%         | 1                |
 |                 |             | `leatherHide`   | 30%         | 1                |
 |                 |             | `gold`          | 60%         | 5–15             |
-| Cave Bat        | 2–5         | `bone`          | 20%         | 1                |
-| Giant Spider    | 3–6         | `leatherHide`   | 40%         | 1                |
+| Cave Bat        | 3–6         | `bone`          | 20%         | 1                |
+| Giant Spider    | 4–7         | `leatherHide`   | 40%         | 1                |
 |                 |             | `antidote`      | 10%         | 1                |
-| Cave Troll      | 5–9         | `ironIngot`     | 50%         | 1                |
+| Cave Troll      | 6–9         | `ironIngot`     | 50%         | 1                |
 |                 |             | `potionHpM`     | 30%         | 1                |
 |                 |             | `gold`          | 80%         | 10–25            |
-| Vampire         | 6–9         | `gemRuby`       | 20%         | 1                |
+| Vampire         | 7–9         | `gemRuby`       | 20%         | 1                |
 |                 |             | `crystal`       | 30%         | 1                |
 |                 |             | `gold`          | 90%         | 15–35            |
-| Dark Mage       | 6–9         | `crystal`       | 50%         | 1                |
+| Dark Mage       | 7–9         | `crystal`       | 50%         | 1                |
 |                 |             | `mageStaff`     | 10%         | 1                |
 |                 |             | `scrollFire`    | 30%         | 1                |
 | Demon           | 8–10        | `dragonScale2`  | 30%         | 1                |

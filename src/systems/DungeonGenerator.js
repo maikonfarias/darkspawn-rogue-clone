@@ -157,12 +157,80 @@ function randInRoom(room) {
 
 // ── Main Generator ───────────────────────────────────────────
 
-export function generateDungeon(floor) {
+/**
+ * Floor 1 — scripted intro: 2 rooms, 1 corridor with a door,
+ * a dagger in the start room, and a single rat in the end room.
+ */
+function generateFloor1() {
   const grid = createGrid(MAP_W, MAP_H);
 
-  // Build BSP tree
-  const root = new BSPNode(0, 0, MAP_W, MAP_H);
-  const iterations = 5;
+  // Room 1 (start) — left half of map
+  const r1w = rand(6, 9), r1h = rand(5, 7);
+  const r1x = rand(6, Math.floor(MAP_W / 2) - r1w - 6);
+  const r1y = rand(10, MAP_H - r1h - 10);
+  const room1 = { x: r1x, y: r1y, w: r1w, h: r1h };
+
+  // Room 2 (end) — right half of map
+  const r2w = rand(6, 9), r2h = rand(5, 7);
+  const r2x = rand(Math.floor(MAP_W / 2) + 6, MAP_W - r2w - 6);
+  const r2y = rand(10, MAP_H - r2h - 10);
+  const room2 = { x: r2x, y: r2y, w: r2w, h: r2h };
+
+  carveRoom(grid, room1);
+  carveRoom(grid, room2);
+  connectRooms(grid, room1, room2);
+  pruneInvalidDoors(grid);
+
+  const startPos = center(room1);
+  const endPos   = center(room2);
+  grid[startPos.y][startPos.x] = TILE.STAIRS_UP;
+  grid[endPos.y][endPos.x]     = TILE.STAIRS_DOWN;
+
+  // Guaranteed dagger somewhere in the start room (not on the stairs)
+  let itemPos;
+  do { itemPos = randInRoom(room1); }
+  while (itemPos.x === startPos.x && itemPos.y === startPos.y);
+
+  // Guaranteed rat somewhere in the end room (not on the stairs)
+  let monsterPos;
+  do { monsterPos = randInRoom(room2); }
+  while (monsterPos.x === endPos.x && monsterPos.y === endPos.y);
+
+  return {
+    grid,
+    rooms:          [room1, room2],
+    startPos,
+    endPos,
+    monsterSpawns:  [],
+    itemSpawns:     [],
+    chestSpawns:    [],
+    forcedItems:    [{ x: itemPos.x,    y: itemPos.y,    itemId:    'dagger' }],
+    forcedMonsters: [{ x: monsterPos.x, y: monsterPos.y, monsterId: 'rat'   }],
+    width:  MAP_W,
+    height: MAP_H,
+  };
+}
+
+export function generateDungeon(floor) {
+  // Floor 1 is a scripted intro level — 2 rooms + 1 corridor
+  if (floor === 1) return generateFloor1();
+
+  const grid = createGrid(MAP_W, MAP_H);
+
+  // Scale BSP depth with floor: deeper floors get more rooms.
+  // floor 2 → 2 iters, floor 4 → 3, floor 6 → 4, floor 8 → 5, floor 9+ → 6
+  const iterations = Math.min(2 + Math.floor((floor - 2) * 0.7), 6);
+
+  // Constrain the play area on early floors so rooms stay close together
+  // and corridors don't stretch across the whole map.
+  // floor 2 → ~45 %, floor 5 → ~66 %, floor 8 → ~87 %, floor 9+ → 100 %
+  const areaScale = Math.min(0.45 + (floor - 2) * 0.07, 1.0);
+  const areaW = Math.max(Math.floor(MAP_W * areaScale), BSP_MIN_SIZE * 3);
+  const areaH = Math.max(Math.floor(MAP_H * areaScale), BSP_MIN_SIZE * 3);
+  const areaX = Math.floor((MAP_W - areaW) / 2);
+  const areaY = Math.floor((MAP_H - areaH) / 2);
+
+  const root = new BSPNode(areaX, areaY, areaW, areaH);
   let nodes = [root];
   for (let i = 0; i < iterations; i++) {
     const next = [];
@@ -196,9 +264,14 @@ export function generateDungeon(floor) {
   const endPos = center(endRoom);
   grid[endPos.y][endPos.x] = TILE.STAIRS_DOWN;
 
-  // Monster spawn points (not in start/end rooms)
+  // Monster spawn points (not in start/end rooms).
+  // Scale count gradually: floor 2 → ~2-3, floor 5 → ~5-7, floor 10 → ~13-16.
+  // Also cap at 2 monsters per available room so early maps don't feel overrun.
   const monsterRooms = shuffled.slice(1, -1);
-  const maxMonsters = DUNGEON_CFG.MAX_MONSTERS_BASE + Math.floor(floor * 1.5);
+  const maxMonsters = Math.min(
+    Math.floor(floor * 1.3) + rand(0, 2),
+    Math.max(monsterRooms.length * 2, 1)
+  );
   const monsterSpawns = [];
   for (let i = 0; i < maxMonsters; i++) {
     if (monsterRooms.length === 0) break;

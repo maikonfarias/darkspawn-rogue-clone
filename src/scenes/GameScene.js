@@ -453,6 +453,12 @@ export class GameScene extends Phaser.Scene {
   // ── Spawning ─────────────────────────────────────────────
 
   _spawnMonsters(dungeon, floor) {
+    // Forced monsters (e.g. scripted intro encounters on floor 1)
+    for (const fm of dungeon.forcedMonsters ?? []) {
+      const def = MONSTERS[fm.monsterId];
+      if (def) this.monsters.push(new Monster(def, fm.x, fm.y, floor));
+    }
+
     const table = FLOOR_MONSTER_TABLES[floor - 1] ?? FLOOR_MONSTER_TABLES[0];
     const spawns = dungeon.monsterSpawns;
 
@@ -474,6 +480,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   _spawnItems(dungeon, floor) {
+    // Forced item placements (e.g. guaranteed dagger on floor 1)
+    for (const fi of dungeon.forcedItems ?? []) {
+      this.floorItems.push({ x: fi.x, y: fi.y, item: createItem(fi.itemId) });
+    }
+
     const tableIdx = Math.min(floor - 1, FLOOR_ITEM_TABLES.length - 1);
     const table = FLOOR_ITEM_TABLES[tableIdx];
 
