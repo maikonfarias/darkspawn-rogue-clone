@@ -105,6 +105,14 @@ export class UIScene extends Phaser.Scene {
   // ── Lifecycle ────────────────────────────────────────────
 
   update() {
+    // ── Controller hints visibility sync ──────────────────────
+    const gs0 = this.scene.get(SCENE.GAME);
+    const ctrlNow = !!gs0?._controllerMode;
+    if (ctrlNow !== this._prevCtrlMode) {
+      this._prevCtrlMode = ctrlNow;
+      this._ctrlHintObjs?.forEach(o => o.setVisible(ctrlNow));
+    }
+
     const gp = this.input.gamepad;
     if (!gp || gp.total === 0) return;
     const DEAD = 0.4;
@@ -445,6 +453,9 @@ export class UIScene extends Phaser.Scene {
     // ── Minimap (top-right) ───────────────────────────────────
     this._buildMinimap(W);
 
+    // ── Controller button hints (right side, near log) ──────
+    this._buildControllerHints(W, H);
+
     // ── Bottom message log ──────────────────────────────────
     const LOG_H = 80, LOG_Y = H - LOG_H - 4;
     this.logBg = this.add.rectangle(W / 2, LOG_Y + LOG_H / 2, W - 4, LOG_H, 0x0d1117, 0.88)
@@ -483,6 +494,92 @@ export class UIScene extends Phaser.Scene {
     uiBlock(this._mmX - 12, 0, MM_W + 18, MM_Y + MM_H + 30);
     // Bottom hotbar + log
     uiBlock(0, H - 150, W, 150);
+  }
+
+  // ── Controller Button Hints ────────────────────────────────
+
+  _buildControllerHints(W, H) {
+    const panelW  = MM_W + 4;        // 164 – matches minimap panel width
+    const panelX  = W - MM_W - 6;   // same left edge as minimap
+    const ROW_H   = 22;
+    const HDR_H   = 30;              // extra space above first row for title
+    const panelH  = 5 * ROW_H + HDR_H;
+    const panelY  = H - 154 - panelH; // sit just above hotbar+log block
+    const ICON_X  = panelX + 8;     // icon column left edge
+    const LBL_X   = panelX + 50;    // action label left edge
+
+    const cx = panelX + panelW / 2;
+    const cy = panelY + panelH / 2;
+
+    this._ctrlHintObjs = [];
+    const push = (o) => { this._ctrlHintObjs.push(o); return o; };
+
+    // Background panel
+    push(this.add.rectangle(cx, cy, panelW, panelH, 0x0d1117, 0.88)
+      .setStrokeStyle(1, 0x334466).setScrollFactor(0).setDepth(12));
+
+    // Title
+    push(this.add.text(cx, panelY + 5, '── CONTROLS ──', {
+      fontFamily: 'Courier New', fontSize: '9px', color: '#445566',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(12));
+
+    const rowsData = [
+      { drawFn: 'select', label: 'Inventory'    },
+      { drawFn: 'lbrb',   label: 'Select Skill' },
+      { drawFn: 'y',      label: 'Use Skill'    },
+      { drawFn: 'x',      label: 'Quick Action' },
+      { drawFn: 'a',      label: 'Interact'     },
+    ];
+
+    rowsData.forEach(({ drawFn, label }, i) => {
+      const ry  = panelY + HDR_H + i * ROW_H + ROW_H / 2;
+      const cx  = ICON_X + 8; // icon center X
+      const gfx = push(this.add.graphics().setScrollFactor(0).setDepth(12));
+
+      if (drawFn === 'select') {
+        // Xbox View/Select: dark circle with two overlapping rectangles icon
+        gfx.fillStyle(0x1e1e1e, 1).fillCircle(cx, ry, 5);
+        gfx.lineStyle(1, 0x777777, 1).strokeCircle(cx, ry, 5);
+        // Back rect (slightly offset up-left)
+        gfx.lineStyle(1, 0xaaaaaa, 1);
+        gfx.strokeRoundedRect(cx - 4, ry - 3, 4, 4, 1);
+        // Front rect (offset down-right, filled dark so it overlaps)
+        gfx.fillStyle(0x1e1e1e, 1).fillRoundedRect(cx, ry - 1, 4, 4, 1);
+        gfx.lineStyle(1, 0xdddddd, 1).strokeRoundedRect(cx, ry - 1, 4, 4, 1);
+
+      } else if (drawFn === 'lbrb') {
+        // Two shoulder-button pills side by side
+        [0, 20].forEach(ox => {
+          gfx.fillStyle(0x1a1a1a, 1).fillRoundedRect(ICON_X + ox, ry - 7, 16, 14, 3);
+          gfx.lineStyle(1, 0x555555, 1).strokeRoundedRect(ICON_X + ox, ry - 7, 16, 14, 3);
+        });
+        ['LB', 'RB'].forEach((s, j) => {
+          push(this.add.text(ICON_X + j * 20 + 8, ry, s, {
+            fontFamily: 'Courier New', fontSize: '8px', color: '#cccccc',
+          }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(13));
+        });
+
+      } else {
+        // Circled-letter icons matching inventory interface style
+        // Y=amber Ⓨ  X=blue Ⓧ  A=green Ⓐ
+        const cfg = {
+          y: { char: '\u24ce', color: '#f0a820' },
+          x: { char: '\u24cd', color: '#4d9fe8' },
+          a: { char: '\u24b6', color: '#22cc55' },
+        }[drawFn];
+        push(this.add.text(cx, ry + 3, cfg.char, {
+          fontFamily: 'Courier New', fontStyle: 'bold', fontSize: '11px', color: cfg.color,
+        }).setOrigin(0.5, 0.78).setScrollFactor(0).setDepth(13));
+      }
+
+      // Action label text
+      push(this.add.text(LBL_X, ry, label, {
+        fontFamily: 'Courier New', fontSize: '11px', color: '#aabbcc',
+      }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(12));
+    });
+
+    // Start hidden; revealed when controller mode activates
+    this._ctrlHintObjs.forEach(o => o.setVisible(false));
   }
 
   // ── Skill Hotbar ─────────────────────────────────────────
