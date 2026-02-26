@@ -560,18 +560,35 @@ export class GameScene extends Phaser.Scene {
   // ── Tile Layer ────────────────────────────────────────────
 
   _buildTileLayer() {
+    this.floorLayer  = this.add.container(0, 0);
     this.tileLayer   = this.add.container(0, 0);
     this.itemLayer   = this.add.container(0, 0);
     this.entityLayer = this.add.container(0, 0);
 
+    // Tiles that sit ON TOP of a floor (chest, stairs, door, traps, NPC)
+    // These get a floor sprite drawn underneath so the background always matches.
+    const FLOOR_UNDER = new Set([2, 3, 4, 7, 8, 9, 10, 12]);
+
     // Create tile sprites grid
-    this.tileSprites = [];
+    this.tileSprites  = [];
+    this.floorSprites = []; // underlays for overlay tiles
     for (let y = 0; y < MAP_H; y++) {
       this.tileSprites[y] = [];
       for (let x = 0; x < MAP_W; x++) {
         const t = this.grid[y][x];
         const key = TILE_TEXTURE[String(t)] ?? 'tile-floor';
-        const spr = this.add.image(x * T + T / 2, y * T + T / 2, key);
+        const cx = x * T + T / 2, cy = y * T + T / 2;
+
+        // Floor underlay for overlay tiles
+        if (FLOOR_UNDER.has(t)) {
+          const floor = this.add.image(cx, cy, 'tile-floor');
+          floor.setVisible(false);
+          this.floorLayer.add(floor);
+          if (!this.floorSprites[y]) this.floorSprites[y] = [];
+          this.floorSprites[y][x] = floor;
+        }
+
+        const spr = this.add.image(cx, cy, key);
         spr.setVisible(false);
         this.tileLayer.add(spr);
         this.tileSprites[y][x] = spr;
@@ -718,17 +735,21 @@ export class GameScene extends Phaser.Scene {
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
         const v = this.vis[y][x];
-        const tileSpr = this.tileSprites[y][x];
-        const fogSpr  = this.fogSprites[y][x];
+        const tileSpr  = this.tileSprites[y][x];
+        const floorSpr = this.floorSprites[y]?.[x];
+        const fogSpr   = this.fogSprites[y][x];
 
         if (v === VIS.HIDDEN) {
           tileSpr.setVisible(false);
+          if (floorSpr) floorSpr.setVisible(false);
           fogSpr.setTexture('fog-black').setVisible(true).setAlpha(1);
         } else if (v === VIS.EXPLORED) {
           tileSpr.setVisible(true).setAlpha(0.4);
+          if (floorSpr) floorSpr.setVisible(true).setAlpha(0.4);
           fogSpr.setTexture('fog-explored').setVisible(true).setAlpha(0.65);
         } else {
           tileSpr.setVisible(true).setAlpha(1);
+          if (floorSpr) floorSpr.setVisible(true).setAlpha(1);
           fogSpr.setVisible(false);
         }
 

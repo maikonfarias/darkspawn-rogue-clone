@@ -139,6 +139,28 @@ function isValidDoor(grid, x, y) {
   return vertOk || horizOk;
 }
 
+// If a spawn position lands on a TILE.DOOR, find the nearest plain TILE.FLOOR
+// tile via BFS and return that instead.  Returns null when no floor is reachable.
+function resolveSpawnPos(grid, x, y) {
+  if (grid[y][x] !== TILE.DOOR) return { x, y };
+  const visited = new Set();
+  const queue   = [{ x, y }];
+  visited.add(`${x},${y}`);
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const nx = cur.x + dx, ny = cur.y + dy;
+      const key = `${nx},${ny}`;
+      if (visited.has(key) || !inBounds(nx, ny)) continue;
+      visited.add(key);
+      if (grid[ny][nx] === TILE.FLOOR) return { x: nx, y: ny };
+      if (grid[ny][nx] !== TILE.WALL && grid[ny][nx] !== TILE.VOID)
+        queue.push({ x: nx, y: ny });
+    }
+  }
+  return null; // no floor tile reachable — caller should skip this spawn
+}
+
 // For each room, collect the corridor entry points (FLOOR tiles just outside
 // the room's walls) and place a door there with ~15% probability per entry.
 function placeDoors(grid, rooms) {
@@ -330,7 +352,10 @@ export function generateDungeon(floor) {
   for (let i = 0; i < maxMonsters; i++) {
     if (monsterRooms.length === 0) break;
     const room = pick(monsterRooms);
-    monsterSpawns.push(randInRoom(room));
+    const raw  = randInRoom(room);
+    // If the chosen tile is a door, shift the monster to the nearest floor tile.
+    const pos  = resolveSpawnPos(grid, raw.x, raw.y);
+    if (pos) monsterSpawns.push(pos);
   }
 
   // Item spawn points — scale gently with floor depth so early floors aren't flooded
