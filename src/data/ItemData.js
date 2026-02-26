@@ -67,6 +67,11 @@ export const ITEMS = {
 
   // ── Gold ───────────────────────────────────────────────────
   gold:       { id:'gold',       name:'Gold',              type:ITEM_TYPE.GOLD,     char:'$', color:C.GOLD,   description:'Shiny gold coins.',        value:1,  weight:0 },
+
+  // ── Quest Items ────────────────────────────────────────────
+  shadowMirror: { id:'shadowMirror', name:'Shadow Mirror', type:ITEM_TYPE.QUEST, char:'~', color:C.PURPLE,
+                  description:'An ornate mirror that once held the reflection of Vantus, the Shadow Lord. Bring it to the Elder.',
+                  value:0, weight:1, singleDrop:true },
 };
 
 // Helper: create item instance from definition

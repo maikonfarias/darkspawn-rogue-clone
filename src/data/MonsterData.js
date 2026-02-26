@@ -99,6 +99,15 @@ export const MONSTERS = {
     description:'The immortal Dungeon Lord. Defeat him to win!',
     isBoss: true
   },
+  vantus: {
+    id:'vantus', name:'Vantus', char:'V', color:C.PURPLE,
+    hp:140, atk:16, def:10, spd:3, xp:500,
+    floorMin:10, floorMax:10,
+    loot:[{ id:'dragonEye', chance:0.6 }, { id:'gold', chance:1, qty:[80,150] }],
+    aiType:'boss',
+    description:'Your shadow given form. It wears your face.',
+    isBoss: true
+  },
 };
 
 // Which monsters can appear per floor
@@ -111,6 +120,6 @@ export const FLOOR_MONSTER_TABLES = [
   ['bat', 'skeleton', 'spider', 'orc', 'troll'],              // 6
   ['orc', 'troll', 'vampire', 'darkMage'],                    // 7
   ['orc', 'troll', 'vampire', 'darkMage', 'demon'],           // 8
-  ['troll', 'vampire', 'darkMage', 'demon'],                  // 9
-  ['demon', 'dungeonLord'],                                   // 10 (boss)
+  ['troll', 'vampire', 'darkMage'],                          // 9
+  [],                                                         // 10 — Vantus spawns as dedicated boss; floor has no random monsters
 ];

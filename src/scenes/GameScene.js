@@ -81,6 +81,8 @@ export class GameScene extends Phaser.Scene {
     this._portalReturn = null;  // { floorNum, px, py } — where to return in the dungeon
     this._portalPos    = null;  // { x, y } — portal tile position in town
     this._portalSprite = null;  // Phaser Image for the blue portal visual
+    this._shadowPortal       = null;  // { x, y } — shadow portal tile on floor 10 after Vantus
+    this._shadowPortalSprite = null;  // Phaser Image for the shadow portal visual
 
     this._setupInput();
 
@@ -391,6 +393,9 @@ export class GameScene extends Phaser.Scene {
     this._cancelClickWalk();
     // Destroy portal sprite whenever floors change
     if (this._portalSprite) { this._portalSprite.destroy(); this._portalSprite = null; }
+    // Clear shadow portal when leaving its floor
+    if (this._shadowPortalSprite) { this._shadowPortalSprite.destroy(); this._shadowPortalSprite = null; }
+    this._shadowPortal = null;
     // Clear portal data when entering a dungeon floor (portal only lives in town)
     if (floorNum > 0) { this._portalReturn = null; this._portalPos = null; }
 
@@ -519,11 +524,14 @@ export class GameScene extends Phaser.Scene {
       this.monsters.push(new Monster(def, spawn.x, spawn.y, floor));
     }
 
-    // Guarantee boss on floor 10
+    // Summon Vantus on floor 10 — a shadow mirror of the player
     if (floor === 10) {
       const bossSpawn = dungeon.endPos;
-      this.monsters.push(new Monster(MONSTERS.dungeonLord, bossSpawn.x - 2, bossSpawn.y, floor));
-      this.events_bus.emit(EV.LOG_MSG, { text: '👹 DUNGEON LORD emerges!', color: '#ff00ff' });
+      const vantusDef = { ...MONSTERS.vantus };
+      // Mirror the player's effective ATK so Vantus is always a matching challenge
+      vantusDef.atk = Math.max(vantusDef.atk, Math.round(this.player.stats.atk * 1.15));
+      this.monsters.push(new Monster(vantusDef, bossSpawn.x, bossSpawn.y, floor));
+      this.events_bus.emit(EV.LOG_MSG, { text: '👤 A shadow steps from the darkness… Your own reflection stares back.', color: '#cc88ff' });
     }
   }
 
@@ -776,6 +784,11 @@ export class GameScene extends Phaser.Scene {
       const v = this.vis[this._portalPos.y][this._portalPos.x];
       this._portalSprite.setVisible(v === VIS.VISIBLE);
     }
+    // Shadow portal sprite (floor 10, after Vantus)
+    if (this._shadowPortalSprite && this._shadowPortal) {
+      const sv = this.vis[this._shadowPortal.y]?.[this._shadowPortal.x];
+      this._shadowPortalSprite.setVisible(sv === VIS.VISIBLE);
+    }
 
     // Monsters
     const _nowVisible = new Set();
@@ -817,7 +830,9 @@ export class GameScene extends Phaser.Scene {
       const tile = this.grid[py]?.[px];
       const onPortal = this.floor === 0 && this._portalReturn &&
                        this._portalPos && px === this._portalPos.x && py === this._portalPos.y;
-      const onInteract = tile === TILE.STAIRS_DOWN || tile === TILE.STAIRS_UP || onPortal;
+      const onShadowPortal = this._shadowPortal &&
+                             px === this._shadowPortal.x && py === this._shadowPortal.y;
+      const onInteract = tile === TILE.STAIRS_DOWN || tile === TILE.STAIRS_UP || onPortal || onShadowPortal;
       if (onInteract && !this.gamePaused) {
         this._actionHint
           .setText(this._controllerMode ? '\u24b6  ENTER' : 'ENTER')
@@ -1180,6 +1195,53 @@ export class GameScene extends Phaser.Scene {
       this.floorItems.push({ x: monster.x, y: monster.y, item: createItem(id, qty) });
     }
     this._rebuildItemSprites();
+    // Vantus special death: drop Shadow Mirror + open shadow portal
+    if (monster.def.id === 'vantus') {
+      this._onVantusDeath(monster);
+    }
+  }
+
+  /** Called when Vantus is slain — drops Shadow Mirror and opens a one-way portal to town. */
+  _onVantusDeath(vantus) {
+    this.events_bus.emit(EV.LOG_MSG, { text: '\u2756 Vantus dissolves into shadow\u2026', color: '#cc88ff' });
+    this.events_bus.emit(EV.LOG_MSG, { text: '\uD83E\uDEDE The Shadow Mirror clatters to the ground!', color: '#ddaaff' });
+    this.floorItems.push({ x: vantus.x, y: vantus.y, item: createItem('shadowMirror') });
+    this._rebuildItemSprites();
+
+    // Find a valid floor tile nearby for the portal
+    const offsets = [[1,0],[0,1],[-1,0],[0,-1],[2,0],[0,2],[-2,0],[0,-2]];
+    let ppx = vantus.x, ppy = vantus.y;
+    for (const [dx, dy] of offsets) {
+      const nx = vantus.x + dx, ny = vantus.y + dy;
+      if (nx >= 0 && ny >= 0 && nx < MAP_W && ny < MAP_H &&
+          this.grid[ny]?.[nx] === TILE.FLOOR) {
+        ppx = nx; ppy = ny; break;
+      }
+    }
+    this._shadowPortal = { x: ppx, y: ppy };
+    if (this._shadowPortalSprite) this._shadowPortalSprite.destroy();
+    this._shadowPortalSprite = this.add.image(
+      ppx * T + T / 2, ppy * T + T / 2, 'town-portal'
+    ).setDepth(5).setTint(0xaa44ff).setAlpha(0.9);
+    SFX.play('townScroll');
+    this.events_bus.emit(EV.LOG_MSG, {
+      text: '\uD83C\uDF00 A shadow portal shimmers nearby. Step through to return to town.',
+      color: '#cc88ff',
+    });
+  }
+
+  /** Step through the floor-10 shadow portal — one-way trip back to town. */
+  _useShadowPortal() {
+    SFX.play('stairs-up');
+    this._shadowPortal = null;
+    if (this._shadowPortalSprite) { this._shadowPortalSprite.destroy(); this._shadowPortalSprite = null; }
+    this._saveCurrentFloor();
+    this.floor = 0;
+    this._loadFloor(0);
+    this.events_bus.emit(EV.LOG_MSG, {
+      text: '\u2756 The shadow portal dissolves. You return to town.',
+      color: '#cc88ff',
+    });
   }
 
   /** Space / click-own-tile: pick up item → use stairs → wait */
@@ -1200,6 +1262,10 @@ export class GameScene extends Phaser.Scene {
     if (this.floor === 0 && this._portalReturn && this._portalPos &&
         px === this._portalPos.x && py === this._portalPos.y) {
       this._useTownPortal(); return;
+    }
+    // Shadow portal — one-way from floor 10 to town
+    if (this._shadowPortal && px === this._shadowPortal.x && py === this._shadowPortal.y) {
+      this._useShadowPortal(); return;
     }
 
     // 3. Wait a turn
@@ -1231,8 +1297,12 @@ export class GameScene extends Phaser.Scene {
       const nx = x + dx, ny = y + dy;
       if (nx >= 0 && ny >= 0 && nx < MAP_W && ny < MAP_H &&
           this.grid[ny][nx] === TILE.NPC) {
+        const hasMirror = this.player.inventory.some(it => it?.id === 'shadowMirror') ||
+                          Object.values(this.player.equipment).some(it => it?.id === 'shadowMirror');
         this.events_bus.emit(EV.LOG_MSG, {
-          text: '🧙 Elder: "Stay a while and listen..."',
+          text: hasMirror
+            ? '🧙 Elder: "Thank you for defeating Vantus, the Shadow Lord!"'
+            : '🧙 Elder: "Stay a while and listen..."',
           color: '#ddaaff',
         });
         const p = this.player;

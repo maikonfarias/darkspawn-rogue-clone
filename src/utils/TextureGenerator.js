@@ -1083,6 +1083,46 @@ function genMonster(scene, id, cfg) {
       g.fillRect(17, 30, 5, 1);
       break;
     }
+
+    case 'vantus': {
+      // Shadow mirror of the player — same silhouette, all near-black with violet details.
+      const VS  = 0x0c0818;  // near-black shadow body
+      const VS2 = 0x1a1030;  // slightly lighter (subtle purple depth)
+      const VA  = 0x6600cc;  // violet aura accent
+
+      // Boots
+      g.fillStyle(0x090606, 1);
+      g.fillRect(8, 26, 5, 5); g.fillRect(19, 26, 5, 5);
+      // Legs
+      g.fillStyle(VS, 1);
+      g.fillRect(9, 19, 5, 8); g.fillRect(18, 19, 5, 8);
+      // Body
+      g.fillStyle(VS, 1); g.fillRect(8, 12, 16, 10);
+      g.fillStyle(VS2, 1); g.fillRect(9, 12, 14, 4);
+      // Sleeves
+      g.fillStyle(VS, 1);
+      g.fillRect(4, 12, 5, 5); g.fillRect(23, 12, 5, 5);
+      // Neck
+      g.fillStyle(VS, 1); g.fillRect(13, 9, 6, 4);
+      // Head
+      g.fillStyle(VS2, 1); g.fillRect(10, 2, 12, 10);
+      // Hair (void-black)
+      g.fillStyle(0x050208, 1); g.fillRect(9, 2, 14, 4);
+      // Eyes — glowing violet
+      g.fillStyle(0xcc44ff, 1);
+      g.fillRect(12, 6, 3, 2); g.fillRect(17, 6, 3, 2);
+      // Eye specular
+      g.fillStyle(0xffffff, 1);
+      g.fillRect(13, 6, 1, 1); g.fillRect(18, 6, 1, 1);
+      // Violet aura fringe (scattered 1-px edge glow)
+      g.fillStyle(VA, 1);
+      g.fillRect(7,  11, 1, 1); g.fillRect(24, 11, 1, 1);
+      g.fillRect(6,  18, 1, 1); g.fillRect(25, 18, 1, 1);
+      g.fillRect(9,   1, 1, 1); g.fillRect(21,  1, 1, 1);
+      g.fillRect(9,  30, 1, 1); g.fillRect(22, 30, 1, 1);
+      g.fillRect(4,  14, 1, 1); g.fillRect(27, 14, 1, 1);
+      break;
+    }
   }
 
   g.generateTexture(`monster-${id}`, T, T);
@@ -1280,6 +1320,45 @@ function genItemTextures(scene) {
     g.fillRect(14, 10, 1, 1);
   });
 
+  // Shadow Mirror — ornate oval mirror with brass frame and silvery face
+  genItem('shadowMirror', g => {
+    // Outer frame shadow (dark brown)
+    g.fillStyle(0x4a3000, 1);
+    g.fillEllipse(12, 10, 18, 14);
+    // Outer frame (dark gold/brass)
+    g.fillStyle(0x8b6914, 1);
+    g.fillEllipse(12, 10, 16, 12);
+    // Frame highlight (bright gold)
+    g.fillStyle(0xd4a820, 1);
+    g.fillEllipse(12,  9, 14, 10);
+    // Mirror face (pale silver)
+    g.fillStyle(0xd8e8f4, 1);
+    g.fillEllipse(12, 10, 12,  9);
+    // Reflection shimmer (diagonal light strip)
+    g.fillStyle(0xffffff, 0.9);
+    g.fillRect(8,  7, 2, 1);
+    g.fillRect(9,  8, 4, 1);
+    g.fillRect(10, 9, 3, 1);
+    // Subtle inner tint (mirror's depth)
+    g.fillStyle(0xa8c4d8, 1);
+    g.fillEllipse(13, 11, 6, 5);
+    // Decorative frame gems — four tiny gold dots around oval
+    g.fillStyle(0xf0d040, 1);
+    g.fillRect(12,  4, 1, 1);  // top
+    g.fillRect(12, 15, 1, 1);  // bottom
+    g.fillRect( 4,  9, 1, 1);  // left
+    g.fillRect(19,  9, 1, 1);  // right
+    // Handle (below the oval)
+    g.fillStyle(0x8b6914, 1);
+    g.fillRect(10, 16, 4, 5);
+    g.fillStyle(0xd4a820, 1);
+    g.fillRect(11, 16, 2, 5);
+    // Handle end cap
+    g.fillStyle(0x8b6914, 1);
+    g.fillRect(10, 21, 4, 1);
+    g.fillStyle(0xf0d040, 1);
+    g.fillRect(11, 21, 2, 1);
+  });
 
   // rags — torn cloth strips
   genItem('rags', g => {

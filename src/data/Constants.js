@@ -41,6 +41,7 @@ export const ITEM_TYPE = Object.freeze({
   SCROLL:   'scroll',
   MATERIAL: 'material',
   GOLD:     'gold',
+  QUEST:    'quest',
 });
 
 // ── Equipment Slots ──────────────────────────────────────────

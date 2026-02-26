@@ -955,7 +955,7 @@ export class UIScene extends Phaser.Scene {
     const tt = this._invTooltip;
     if (!tt) return;
     const typeLabel = { weapon:'Weapon', armor:'Armor', ring:'Ring', amulet:'Amulet',
-      potion:'Potion', scroll:'Scroll', material:'Material', gold:'Gold' };
+      potion:'Potion', scroll:'Scroll', material:'Material', gold:'Gold', quest:'Quest Item' };
     tt.icon.setTexture(`item-${item.id ?? item.type}`).setVisible(true);
     tt.name.setText(item.name).setVisible(true);
     tt.type.setText(typeLabel[item.type] ?? item.type ?? '').setVisible(true);
@@ -973,7 +973,7 @@ export class UIScene extends Phaser.Scene {
     tt.value.setText(item.value ? `Value: ${item.value}g` : '').setVisible(!!item.value);
     // Action button label depends on selection source
     const isEquipSrc = this._selSrc === 'equip';
-    const noAction   = item.type === 'material'; // materials have no direct use action
+    const noAction   = item.type === 'material' || item.type === 'quest'; // no direct use action
     const lbl = isEquipSrc ? 'UNEQUIP' : (item.slot ? 'EQUIP' : (noAction ? '' : 'USE'));
     if (lbl) {
       tt.actionLbl.setText(lbl).setVisible(true);
