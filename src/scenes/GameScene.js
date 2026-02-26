@@ -4,7 +4,7 @@
 import { SCENE, TILE, VIS, EV, TILE_SIZE, MAP_W, MAP_H,
          DUNGEON_CFG, ITEM_TYPE, AI, C, DIR4 } from '../data/Constants.js';
 import { generateDungeon } from '../systems/DungeonGenerator.js';
-import { generateTown } from '../systems/TownGenerator.js';
+import { generateTown, TOWN_GATE_POS } from '../systems/TownGenerator.js';
 import { computeFOV, createVisGrid, revealAll } from '../systems/FOVSystem.js';
 import { Player } from '../entities/Player.js';
 import { Monster } from '../entities/Monster.js';
@@ -1021,7 +1021,8 @@ export class GameScene extends Phaser.Scene {
 
     // Check tile passability
     const t = this.grid[ny][nx];
-    if (t === TILE.WALL || t === TILE.VOID || t === TILE.NPC) return;
+    if (t === TILE.WALL || t === TILE.VOID || t === TILE.NPC ||
+        t === TILE.TREE || t === TILE.GATE_CLOSED) return;
 
     // Open doors
     if (t === TILE.DOOR) {
@@ -1305,6 +1306,7 @@ export class GameScene extends Phaser.Scene {
             : '🧙 Elder: "Stay a while and listen..."',
           color: '#ddaaff',
         });
+        if (hasMirror) this._deliverShadowMirror();
         const p = this.player;
         if (p.stats.hp < p.stats.maxHp || p.stats.mana < p.stats.maxMana) {
           p.stats.hp   = p.stats.maxHp;
@@ -1318,6 +1320,35 @@ export class GameScene extends Phaser.Scene {
         }
         return;
       }
+    }
+  }
+
+  /**
+   * Remove the Shadow Mirror from the player's inventory and open the town gate.
+   * Called once when the player speaks to the elder while carrying the mirror.
+   */
+  _deliverShadowMirror() {
+    // Remove from inventory
+    const idx = this.player.inventory.findIndex(it => it?.id === 'shadowMirror');
+    if (idx !== -1) this.player.inventory[idx] = null;
+    // Safety check — equipment slots
+    for (const slot of Object.keys(this.player.equipment)) {
+      if (this.player.equipment[slot]?.id === 'shadowMirror')
+        this.player.equipment[slot] = null;
+    }
+    this.events_bus.emit(EV.STATS_CHANGED);
+    // Open the gate (only if not already open)
+    const { x: gx, y: gy } = TOWN_GATE_POS;
+    if (this.grid[gy]?.[gx] !== TILE.FLOOR) {
+      this.grid[gy][gx] = TILE.FLOOR;
+      if (this.tileSprites[gy]?.[gx]) {
+        this.tileSprites[gy][gx].setTexture('tile-floor');
+      }
+      SFX.play('chest');
+      this.events_bus.emit(EV.LOG_MSG, {
+        text: '🔓 The Shadow Mirror dissolves into light. A gate to the west swings open!',
+        color: '#ffd700',
+      });
     }
   }
 

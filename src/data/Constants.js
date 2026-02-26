@@ -22,6 +22,8 @@ export const TILE = Object.freeze({
   TRAP_VISIBLE: 10,
   GRASS:        11,
   NPC:          12,
+  TREE:         13,  // impassable forest tree (outside town walls)
+  GATE_CLOSED:  14,  // town gate — opens when shadow mirror is delivered
 });
 
 // ── FOV States ───────────────────────────────────────────────

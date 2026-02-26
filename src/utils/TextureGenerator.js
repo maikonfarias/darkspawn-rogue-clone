@@ -233,6 +233,81 @@ function genNPC(scene) {
   g.destroy();
 }
 
+function genTree(scene) {
+  const g = scene.make.graphics({ add: false });
+  // Forest duff — very dark leaf litter
+  g.fillStyle(0x0e1c0a, 1); g.fillRect(0, 0, T, T);
+  // Trunk (visible at base)
+  g.fillStyle(0x6b4010, 1); g.fillRect(13, 18, 6, 10);
+  g.fillStyle(0x4a2c08, 1); g.fillRect(13, 22, 6, 6);
+  // Canopy shadow / outer ring
+  g.fillStyle(0x14380a, 1); g.fillEllipse(16, 15, 28, 24);
+  // Main canopy
+  g.fillStyle(0x1e5c0c, 1); g.fillEllipse(16, 14, 24, 20);
+  // Inner canopy (brighter)
+  g.fillStyle(0x2c8014, 1); g.fillEllipse(14, 12, 16, 13);
+  // Highlight cluster
+  g.fillStyle(0x44aa20, 1); g.fillEllipse(12, 10,  9,  7);
+  // Specular highlight
+  g.fillStyle(0x60cc2c, 1); g.fillRect(10,  8,  4,  3);
+  g.generateTexture('tile-tree', T, T);
+  g.destroy();
+}
+
+function genGateClosed(scene) {
+  const g = scene.make.graphics({ add: false });
+  // Stone gate posts (full tile background)
+  g.fillStyle(0x445566, 1); g.fillRect(0, 0, T, T);
+  g.fillStyle(0x556677, 1); g.fillRect(1, 1, 2, T - 2);  // left post highlight
+  g.fillStyle(0x334455, 1); g.fillRect(T - 3, 0, 3, T);  // right post shadow
+  // Dark gap between doors (centre seam)
+  g.fillStyle(0x120d06, 1); g.fillRect(15, 0, 2, T);
+  // Left door background
+  g.fillStyle(0x5a3a18, 1); g.fillRect(4, 1, 11, 30);
+  // Left door planks
+  g.fillStyle(0x8b5a22, 1);
+  g.fillRect(5,  2, 10, 5);
+  g.fillRect(5,  9, 10, 5);
+  g.fillRect(5, 16, 10, 5);
+  g.fillRect(5, 23, 10, 8);
+  // Left plank highlight edges
+  g.fillStyle(0xaa7030, 1);
+  g.fillRect(5,  2, 10, 1);
+  g.fillRect(5,  9, 10, 1);
+  g.fillRect(5, 16, 10, 1);
+  g.fillRect(5, 23, 10, 1);
+  // Right door background
+  g.fillStyle(0x5a3a18, 1); g.fillRect(17, 1, 11, 30);
+  // Right door planks
+  g.fillStyle(0x8b5a22, 1);
+  g.fillRect(18,  2, 10, 5);
+  g.fillRect(18,  9, 10, 5);
+  g.fillRect(18, 16, 10, 5);
+  g.fillRect(18, 23, 10, 8);
+  // Right plank highlight edges
+  g.fillStyle(0xaa7030, 1);
+  g.fillRect(18,  2, 10, 1);
+  g.fillRect(18,  9, 10, 1);
+  g.fillRect(18, 16, 10, 1);
+  g.fillRect(18, 23, 10, 1);
+  // Horizontal iron crossbar (across both doors)
+  g.fillStyle(0x444448, 1); g.fillRect(4, 13, 24, 4);
+  g.fillStyle(0x666670, 1); g.fillRect(4, 13, 24, 1);  // crossbar highlight
+  // Centre lock / latch
+  g.fillStyle(0x888890, 1); g.fillRect(13, 12, 6, 6);
+  g.fillStyle(0xaaaacc, 1); g.fillRect(13, 12, 6, 1);
+  g.fillStyle(0x222228, 1); g.fillRect(14, 14, 4, 3);  // keyhole shadow
+  g.fillStyle(0x444450, 1); g.fillRect(15, 14, 2, 3);  // keyhole
+  // Iron bolts on planks
+  g.fillStyle(0x999999, 1);
+  g.fillRect( 6,  4, 2, 2); g.fillRect(11,  4, 2, 2);
+  g.fillRect( 6, 11, 2, 2); g.fillRect(11, 11, 2, 2);
+  g.fillRect(19,  4, 2, 2); g.fillRect(24,  4, 2, 2);
+  g.fillRect(19, 11, 2, 2); g.fillRect(24, 11, 2, 2);
+  g.generateTexture('tile-gate-closed', T, T);
+  g.destroy();
+}
+
 // ── Character Sprites (32×32) ─────────────────────────────────
 
 function genPlayer(scene) {
@@ -1867,6 +1942,8 @@ export function generateAllTextures(scene) {
   genWall(scene);
   genFloor(scene);
   genGrass(scene);
+  genTree(scene);
+  genGateClosed(scene);
   genNPC(scene);
   genDoor(scene);
   genStairsDown(scene);
@@ -2040,4 +2117,6 @@ export const TILE_TEXTURE = {
   '10': 'tile-floor',   // visible trap (tinted at render time)
   '11': 'tile-grass',
   '12': 'tile-npc',
+  '13': 'tile-tree',
+  '14': 'tile-gate-closed',
 };
