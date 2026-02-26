@@ -1233,7 +1233,53 @@ function genItemTextures(scene) {
     g.fillRect(11, 3, 2, 1); g.fillRect(11, 6, 2, 1); g.fillRect(11, 9, 2, 1);
   });
 
-  // ─── ARMOR ───────────────────────────────────────────────────
+  // shortBow — curved bow stave with string
+  genItem('shortBow', g => {
+    // Side-view D-bow. Stave arcs LEFT (outward), string on right.
+    // Canvas 24x24. 5 sections: nock→limb→centre→limb→nock
+    //   Top nock  (y=2-3):   x=10 w=2  shadow x=12
+    //   Upper limb(y=4-6):   x=8  w=3  shadow x=11
+    //   Centre    (y=7-13):  x=6  w=4  shadow x=10
+    //   Lower limb(y=14-16): x=8  w=3  shadow x=11
+    //   Bot nock  (y=17-18): x=10 w=2  shadow x=12
+    //   String: x=15, y=2-18 (gap at centre = 5px, very visible)
+
+    // Shadow (right edge of stave cross-section)
+    g.fillStyle(0x3a1e00, 1);
+    g.fillRect(12,  2, 1, 2);   // top nock
+    g.fillRect(11,  4, 1, 3);   // upper limb
+    g.fillRect(10,  7, 1, 7);   // centre
+    g.fillRect(11, 14, 1, 3);   // lower limb
+    g.fillRect(12, 17, 1, 2);   // bottom nock
+
+    // Stave mid-tone (main body)
+    g.fillStyle(0x8b4513, 1);
+    g.fillRect(10,  2, 2, 2);   // top nock
+    g.fillRect( 8,  4, 3, 3);   // upper limb
+    g.fillRect( 6,  7, 4, 7);   // centre (widest)
+    g.fillRect( 8, 14, 3, 3);   // lower limb
+    g.fillRect(10, 17, 2, 2);   // bottom nock
+
+    // Highlight (left/outer convex face)
+    g.fillStyle(0xd08030, 1);
+    g.fillRect(10,  2, 1, 2);
+    g.fillRect( 8,  4, 1, 3);
+    g.fillRect( 6,  7, 1, 7);
+    g.fillRect( 8, 14, 1, 3);
+    g.fillRect(10, 17, 1, 2);
+
+    // Bright specular sliver on outer curve
+    g.fillStyle(0xf0a050, 1);
+    g.fillRect(6,  9, 1, 3);  // centre peak highlight
+
+    // String — straight on right, taut between nock tips
+    g.fillStyle(0x55bbff, 1);
+    g.fillRect(14,  2, 1, 17);
+    // Bright glint at centre (bowstring is tightest/closest here)
+    g.fillStyle(0xaaddff, 1);
+    g.fillRect(14, 10, 1, 1);
+  });
+
 
   // rags — torn cloth strips
   genItem('rags', g => {
@@ -1851,6 +1897,52 @@ function genWeaponOverlays(scene) {
     g.fillStyle(0x00bbff, 1); g.fillRect(23, 13, 6, 2);  // guard
     g.fillStyle(0x8b6914, 1); g.fillRect(25, 15, 2, 5);  // handle
     g.fillStyle(0xaaffee, 0.6); g.fillRect(25, 4, 1, 8); // glow
+  });
+
+  // short bow — side-view D-bow on left side, stave curves outward (left)
+  genWeaponOverlay(scene, 'weapon-overlay-shortbow', g => {
+    // T=32px canvas. Bow held on right side.
+    //   Top nock  (y=6-7):   x=13 w=2  shadow x=15
+    //   Upper limb(y=8-11):  x=11 w=3  shadow x=14
+    //   Centre    (y=12-19): x=8  w=4  shadow x=12
+    //   Lower limb(y=20-23): x=11 w=3  shadow x=14
+    //   Bot nock  (y=24-25): x=13 w=2  shadow x=15
+    //   String: x=18, y=6-25
+
+    // Shadow
+    g.fillStyle(0x3a1e00, 1);
+    g.fillRect(15,  6, 1, 2);
+    g.fillRect(14,  8, 1, 4);
+    g.fillRect(12, 12, 1, 8);
+    g.fillRect(14, 20, 1, 4);
+    g.fillRect(15, 24, 1, 2);
+
+    // Stave main
+    g.fillStyle(0x8b4513, 1);
+    g.fillRect(13,  6, 2, 2);   // top nock
+    g.fillRect(11,  8, 3, 4);   // upper limb
+    g.fillRect( 8, 12, 4, 8);   // centre (widest, bows outward)
+    g.fillRect(11, 20, 3, 4);   // lower limb
+    g.fillRect(13, 24, 2, 2);   // bot nock
+
+    // Highlight (left/outer edge)
+    g.fillStyle(0xd08030, 1);
+    g.fillRect(13,  6, 1, 2);
+    g.fillRect(11,  8, 1, 4);
+    g.fillRect( 8, 12, 1, 8);
+    g.fillRect(11, 20, 1, 4);
+    g.fillRect(13, 24, 1, 2);
+
+    // Specular peak on centre curve
+    g.fillStyle(0xf0a050, 1);
+    g.fillRect(8, 15, 1, 2);
+
+    // String — straight vertical, taut
+    g.fillStyle(0x55bbff, 1);
+    g.fillRect(17,  6, 1, 20);
+    // Bright glint at string centre
+    g.fillStyle(0xaaddff, 1);
+    g.fillRect(17, 15, 1, 2);
   });
 }
 

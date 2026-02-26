@@ -15,6 +15,7 @@ export const ITEMS = {
   battleAxe:  { id:'battleAxe',  name:'Battle Axe',      type:ITEM_TYPE.WEAPON, slot:SLOT.WEAPON, char:'/', color:C.ORANGE,  atk:11, description:'Heavy axe that cleaves armor.',   value:90,  weight:9  },
   mageStaff:  { id:'mageStaff',  name:'Mage Staff',      type:ITEM_TYPE.WEAPON, slot:SLOT.WEAPON, char:'/', color:C.PURPLE,  atk:6,  manaBonus:10, description:'Channels magical energy.',  value:75,  weight:5  },
   warHammer:  { id:'warHammer',  name:'War Hammer',       type:ITEM_TYPE.WEAPON, slot:SLOT.WEAPON, char:'/', color:C.BROWN,   atk:13, description:'A devastating blunt weapon.',     value:110, weight:11 },
+  shortBow:   { id:'shortBow',   name:'Short Bow',        type:ITEM_TYPE.WEAPON, slot:SLOT.WEAPON, char:')', color:C.BROWN,   atk:5,  ranged:true,  description:'A light bow. Fire at any visible enemy.', value:40, weight:3 },
   runicBlade: { id:'runicBlade', name:'Runic Blade',      type:ITEM_TYPE.WEAPON, slot:SLOT.WEAPON, char:'/', color:C.CYAN,    atk:15, manaBonus:5,  description:'Ancient sword etched with runes.', value:200, weight:6 },
 
   // ── Armor ──────────────────────────────────────────────────

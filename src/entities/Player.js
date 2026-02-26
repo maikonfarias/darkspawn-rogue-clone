@@ -134,7 +134,8 @@ export class Player {
       if (item.slot) {
         const current = this.equipment[item.slot];
         const isEmpty = !current || current.id === 'fists' || current.id === 'rags';
-        const isProtected = current?.id === 'mageRobe' || current?.id === 'mageStaff';
+        const isProtected = current?.id === 'mageRobe' || current?.id === 'mageStaff'
+                          || current?.ranged === true;
         const isBetter = item.slot === SLOT.ARMOR
           ? (item.def ?? 0) > (current?.def ?? 0)
           : (item.atk ?? 0) > (current?.atk ?? 0);

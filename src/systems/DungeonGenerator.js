@@ -262,10 +262,15 @@ function generateFloor1() {
   grid[startPos.y][startPos.x] = TILE.STAIRS_UP;
   grid[endPos.y][endPos.x]     = TILE.STAIRS_DOWN;
 
-  // Guaranteed dagger somewhere in the start room (not on the stairs)
+  // Guaranteed dagger and shortBow somewhere in the start room (not on the stairs)
   let itemPos;
   do { itemPos = randInRoom(room1); }
   while (itemPos.x === startPos.x && itemPos.y === startPos.y);
+
+  let bowPos;
+  do { bowPos = randInRoom(room1); }
+  while ((bowPos.x === startPos.x && bowPos.y === startPos.y) ||
+         (bowPos.x === itemPos.x  && bowPos.y === itemPos.y));
 
   // Guaranteed rat somewhere in the end room (not on the stairs)
   let monsterPos;
@@ -280,7 +285,8 @@ function generateFloor1() {
     monsterSpawns:  [],
     itemSpawns:     [],
     chestSpawns:    [],
-    forcedItems:    [{ x: itemPos.x,    y: itemPos.y,    itemId:    'dagger' }],
+    forcedItems:    [{ x: itemPos.x, y: itemPos.y, itemId: 'dagger' },
+                     { x: bowPos.x,  y: bowPos.y,  itemId: 'shortBow' }],
     forcedMonsters: [{ x: monsterPos.x, y: monsterPos.y, monsterId: 'rat'   }],
     width:  MAP_W,
     height: MAP_H,

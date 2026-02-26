@@ -40,6 +40,7 @@ const WEAPON_OVERLAY = {
   mageStaff:  'weapon-overlay-magestaff',
   warHammer:  'weapon-overlay-warhammer',
   runicBlade: 'weapon-overlay-runicblade',
+  shortBow:   'weapon-overlay-shortbow',
 };
 
 // Skills that require picking a tile before they fire
@@ -1084,6 +1085,84 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  _playerBowAttack(monster) {
+    this._playBowAnimation(monster.x, monster.y);
+
+    const result = resolveAttack(this.player, monster, this.events_bus);
+    if (!result.hit) return;
+
+    SFX.play('swing'); // reuse swing SFX until a dedicated bow sound is added
+    this._showDamageNumber(monster.x, monster.y, result.damage, result.crit ? '#ff6600' : '#88ddff');
+
+    let msg = `You shoot ${monster.name} for ${result.damage}`;
+    if (result.crit) msg += ' (CRIT!)';
+    msg += '.';
+    this.events_bus.emit(EV.LOG_MSG, { text: msg, color: '#88ddff' });
+
+    if (result.statusApplied) {
+      this.events_bus.emit(EV.LOG_MSG, { text: `${monster.name} is poisoned!`, color: '#44cc44' });
+    }
+
+    const entry = this.monsterSprites.get(monster);
+    if (entry) {
+      entry.spr.setTint(0xff4444);
+      this.time.delayedCall(150, () => entry.spr?.clearTint?.());
+    }
+
+    if (monster.isDead) {
+      this._onMonsterDeath(monster);
+    }
+  }
+
+  _playBowAnimation(tx, ty) {
+    const px = this.player.x * T + T / 2;
+    const py = this.player.y * T + T / 2;
+    const sx = tx * T + T / 2;
+    const sy = ty * T + T / 2;
+
+    // Angle of travel (radians)
+    const angle = Math.atan2(sy - py, sx - px);
+    const deg   = angle * (180 / Math.PI);
+
+    // Arrow shaft: thin brown rectangle, rotated to face target
+    const arrow = this.add.rectangle(px, py, 10, 2, 0xaa7733).setDepth(30);
+    arrow.setRotation(angle);
+
+    // Arrowhead: tiny lighter triangle approximated as a small rect
+    const head = this.add.rectangle(px, py, 4, 4, 0xddbb77).setDepth(31);
+    head.setRotation(angle);
+
+    // Offset the head forward so it sits at the leading edge of the shaft
+    const headOffX = Math.cos(angle) * 6;
+    const headOffY = Math.sin(angle) * 6;
+    head.x += headOffX;
+    head.y += headOffY;
+
+    // Fletching dot (red) at the tail
+    const fletch = this.add.rectangle(px, py, 3, 3, 0xcc4422).setDepth(30);
+    fletch.setRotation(angle);
+    fletch.x -= headOffX;
+    fletch.y -= headOffY;
+
+    const tween = { x: sx, y: sy, duration: 200, ease: 'Linear',
+      onUpdate: (t, target) => {
+        // Keep head and fletching locked relative to shaft
+        head.x   = target.x + headOffX;
+        head.y   = target.y + headOffY;
+        fletch.x = target.x - headOffX;
+        fletch.y = target.y - headOffY;
+      },
+      onComplete: () => {
+        arrow.destroy(); head.destroy(); fletch.destroy();
+        // Small tan impact puff
+        const puff = this.add.circle(sx, sy, 4, 0xcc9944, 0.9).setDepth(30);
+        this.tweens.add({ targets: puff, scaleX: 2.4, scaleY: 2.4, alpha: 0, duration: 180,
+          onComplete: () => puff.destroy() });
+      }
+    };
+    this.tweens.add({ targets: arrow, ...tween });
+  }
+
   _onMonsterDeath(monster) {
     this.events_bus.emit(EV.LOG_MSG, {
       text: `${monster.name} is slain!`,
@@ -1700,6 +1779,7 @@ export class GameScene extends Phaser.Scene {
     const skillId = ui?._hotbarSkills?.[this._padHotbarIdx] ?? 'attack';
 
     if (skillId === 'attack') {
+      const isBow = !!this.player.equipment?.weapon?.ranged;
       const visible = this.monsters.filter(m => !m.isDead && this.vis[m.y]?.[m.x] === VIS.VISIBLE);
       if (!visible.length) {
         this.events_bus.emit(EV.LOG_MSG, { text: 'No visible enemies.', color: '#778899' });
@@ -1712,7 +1792,9 @@ export class GameScene extends Phaser.Scene {
         return da !== db ? da - db : a.stats.hp - b.stats.hp;
       });
       const target = visible[0];
-      if (Math.abs(target.x - this.player.x) <= 1 && Math.abs(target.y - this.player.y) <= 1) {
+      if (isBow) {
+        this._playerBowAttack(target);
+      } else if (Math.abs(target.x - this.player.x) <= 1 && Math.abs(target.y - this.player.y) <= 1) {
         this._playerAttack(target);
       } else {
         this.events_bus.emit(EV.LOG_MSG, { text: `${target.name} is not in range.`, color: '#778899' });
@@ -1763,7 +1845,35 @@ export class GameScene extends Phaser.Scene {
     const skillId = ui?._hotbarSkills?.[this._padHotbarIdx] ?? 'attack';
 
     if (skillId === 'attack') {
-      // Highlight the 8 adjacent tiles and enter melee targeting mode
+      const isBow = !!this.player.equipment?.weapon?.ranged;
+      if (isBow) {
+        // Bow: highlight all currently visible tiles
+        this._clearTargetGrid();
+        this._padTargetGridGraphics = this.add.graphics().setDepth(14);
+        const g = this._padTargetGridGraphics;
+        for (let y = 0; y < MAP_H; y++) {
+          for (let x = 0; x < MAP_W; x++) {
+            if (this.vis[y]?.[x] !== VIS.VISIBLE) continue;
+            g.fillStyle(0x00ff88, 0.14); g.fillRect(x * T, y * T, T, T);
+            g.lineStyle(1, 0x00ff88, 0.40); g.strokeRect(x * T, y * T, T, T);
+          }
+        }
+        // Seed cursor at nearest visible monster
+        const vis = this.monsters.filter(m => !m.isDead && this.vis[m.y]?.[m.x] === VIS.VISIBLE);
+        vis.sort((a, b) => Math.abs(a.x - this.player.x) + Math.abs(a.y - this.player.y)
+                         - Math.abs(b.x - this.player.x) - Math.abs(b.y - this.player.y));
+        this.targeting   = true;
+        this.targetMode  = 'bow-attack';
+        this.targetExtra = {};
+        this._padTargetX = vis[0]?.x ?? this.player.x;
+        this._padTargetY = vis[0]?.y ?? this.player.y;
+        this._padTargetNavHeld = null;
+        this._targetCursor = this.add.rectangle(0, 0, T, T, 0xffffff, 0.30).setVisible(false).setDepth(25);
+        this._drawTargetPreview(this._padTargetX, this._padTargetY);
+        this.events_bus.emit(EV.LOG_MSG, { text: 'Bow — aim with D-Pad  Ⓐ confirm  Ⓑ cancel', color: '#88ffaa' });
+        return;
+      }
+      // Melee: highlight the 8 adjacent tiles
       this._clearTargetGrid();
       this._padTargetGridGraphics = this.add.graphics().setDepth(14);
       const g = this._padTargetGridGraphics;
@@ -1856,6 +1966,16 @@ export class GameScene extends Phaser.Scene {
     if (dx === 0 && dy === 0) {
       this._playerDefaultAction();
       return;
+    }
+
+    // Bow ranged attack: clicking any visible monster tile fires immediately
+    if (this.player.equipment?.weapon?.ranged) {
+      const m = this.monsters.find(mon => !mon.isDead && mon.x === tx && mon.y === ty);
+      if (m && this.vis[m.y]?.[m.x] === VIS.VISIBLE) {
+        this._playerBowAttack(m);
+        this._endPlayerTurn();
+        return;
+      }
     }
 
     // Adjacent monster (any of 8 directions) → attack directly
@@ -1974,6 +2094,7 @@ export class GameScene extends Phaser.Scene {
     this.targeting = false;
     if (this._aoeGraphics) this._aoeGraphics.clear();
     this._clearTargetGrid();
+    this._padValidTiles = null;
 
     const mode = this.targetMode;
     let   extra = this.targetExtra;
@@ -2039,6 +2160,13 @@ export class GameScene extends Phaser.Scene {
         this._playerAttack(m);
       } else {
         this.events_bus.emit(EV.LOG_MSG, { text: 'No enemy there.', color: '#778899' });
+      }
+    } else if (mode === 'bow-attack') {
+      const m = this.monsters.find(mon => mon.x === tx && mon.y === ty && !mon.isDead);
+      if (m && this.vis[m.y]?.[m.x] === VIS.VISIBLE) {
+        this._playerBowAttack(m);
+      } else {
+        this.events_bus.emit(EV.LOG_MSG, { text: 'No visible target there.', color: '#778899' });
       }
     }
 
