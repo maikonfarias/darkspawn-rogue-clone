@@ -2,14 +2,15 @@
 //  Darkspawn Rogue Quest — Game Scene (Main Gameplay)
 // ============================================================
 import { SCENE, TILE, VIS, EV, TILE_SIZE, MAP_W, MAP_H,
-         DUNGEON_CFG, ITEM_TYPE, AI, C, DIR4 } from '../data/Constants.js';
+         DUNGEON_CFG, JUNGLE_CFG, ITEM_TYPE, AI, C, DIR4 } from '../data/Constants.js';
 import { generateDungeon } from '../systems/DungeonGenerator.js';
+import { generateJungle } from '../systems/JungleGenerator.js';
 import { generateTown, TOWN_GATE_POS } from '../systems/TownGenerator.js';
 import { computeFOV, createVisGrid, revealAll } from '../systems/FOVSystem.js';
 import { Player } from '../entities/Player.js';
 import { Monster } from '../entities/Monster.js';
-import { MONSTERS, FLOOR_MONSTER_TABLES } from '../data/MonsterData.js';
-import { ITEMS, FLOOR_ITEM_TABLES, createItem } from '../data/ItemData.js';
+import { MONSTERS, FLOOR_MONSTER_TABLES, JUNGLE_MONSTER_TABLES } from '../data/MonsterData.js';
+import { ITEMS, FLOOR_ITEM_TABLES, JUNGLE_ITEM_TABLES, createItem } from '../data/ItemData.js';
 import { resolveAttack, fireballDamage, magicBoltDamage, iceNova, applyStatus } from '../systems/CombatSystem.js';
 import { unlockSkill, useSkill } from '../systems/SkillSystem.js';
 import { craftItem, getAvailableRecipes } from '../systems/CraftingSystem.js';
@@ -379,7 +380,7 @@ export class GameScene extends Phaser.Scene {
 
   // ── Floor Loading ────────────────────────────────────────
 
-  _loadFloor(floorNum, fromBelow = false) {
+  _loadFloor(floorNum, fromBelow = false, posOverride = null) {
     // Clear previous floor
     if (this.tileLayer)    this.tileLayer.destroy();
     if (this.itemLayer)    this.itemLayer.destroy();
@@ -414,8 +415,8 @@ export class GameScene extends Phaser.Scene {
       this._floorEndPos   = cached.endPos;
       // Place player at the stair they came through
       const pos = fromBelow ? cached.endPos : cached.startPos;
-      this.player.x = pos.x;
-      this.player.y = pos.y;
+      this.player.x = posOverride?.x ?? pos.x;
+      this.player.y = posOverride?.y ?? pos.y;
     } else if (floorNum === 0) {
       // Generate the fixed starting town
       const town = generateTown();
@@ -428,10 +429,26 @@ export class GameScene extends Phaser.Scene {
       this._floorEndPos   = town.endPos;
       // Player always starts at the town's designated start position
       const pos = fromBelow ? town.endPos : town.startPos;
-      this.player.x = pos.x;
-      this.player.y = pos.y;
+      this.player.x = posOverride?.x ?? pos.x;
+      this.player.y = posOverride?.y ?? pos.y;
       this.monsters   = [];
       this.floorItems = [];
+    } else if (floorNum >= 101) {
+      // Generate jungle floor
+      const jungleFloor = floorNum - JUNGLE_CFG.FLOOR_OFFSET;
+      const jungle = generateJungle(jungleFloor);
+      this.grid           = jungle.grid;
+      this.rooms          = jungle.rooms;
+      this.vis            = createVisGrid();
+      this._floorStartPos = jungle.startPos;
+      this._floorEndPos   = jungle.endPos;
+      const pos = fromBelow ? jungle.endPos : jungle.startPos;
+      this.player.x = posOverride?.x ?? pos.x;
+      this.player.y = posOverride?.y ?? pos.y;
+      this.monsters = [];
+      this._spawnMonsters(jungle, floorNum);
+      this.floorItems = [];
+      this._spawnItems(jungle, floorNum);
     } else {
       // Generate dungeon
       const dungeon = generateDungeon(floorNum);
@@ -442,8 +459,8 @@ export class GameScene extends Phaser.Scene {
       this._floorEndPos   = dungeon.endPos;
       // Place player at the stair they came through
       const pos = fromBelow ? dungeon.endPos : dungeon.startPos;
-      this.player.x = pos.x;
-      this.player.y = pos.y;
+      this.player.x = posOverride?.x ?? pos.x;
+      this.player.y = posOverride?.y ?? pos.y;
       // Spawn monsters
       this.monsters = [];
       this._spawnMonsters(dungeon, floorNum);
@@ -474,17 +491,27 @@ export class GameScene extends Phaser.Scene {
     // Emit initial state
     this.events_bus.emit(EV.FLOOR_CHANGED, { floor: floorNum });
     this.events_bus.emit(EV.STATS_CHANGED);
+    const isJungle = floorNum >= 101;
+    const jf = isJungle ? floorNum - JUNGLE_CFG.FLOOR_OFFSET : 0;
     this.events_bus.emit(EV.LOG_MSG, {
       text: floorNum === 0 && !cached
         ? `Welcome to town! Enter the left building to start your adventure.`
         : floorNum === 0
           ? `You return to town.`
+          : isJungle && !cached
+            ? jf === 1
+              ? `Jungle Floor 1. The canopy closes overhead...`
+              : jf === 10
+                ? `Jungle Floor 10. Drums grow louder...`
+                : `Jungle Floor ${jf}. The jungle grows denser...`
+          : isJungle && cached
+            ? `You press deeper into the jungle (Floor ${jf}).`
           : floorNum === 1 && !cached
             ? `Floor ${floorNum}. The dungeon stretches before you...`
             : cached
               ? `You return to floor ${floorNum}.`
               : `Floor ${floorNum}. The air grows colder...`,
-      color: floorNum === 0 ? '#88cc88' : '#88aacc'
+      color: floorNum === 0 ? '#88cc88' : isJungle ? '#88cc66' : '#88aacc'
     });
 
     if (floorNum === DUNGEON_CFG.FLOORS) {
@@ -506,7 +533,28 @@ export class GameScene extends Phaser.Scene {
   // ── Spawning ─────────────────────────────────────────────
 
   _spawnMonsters(dungeon, floor) {
-    // Forced monsters (e.g. scripted intro encounters on floor 1)
+    // ── Jungle floors 101-110 ──────────────────────────────
+    if (floor >= 101) {
+      const jf = floor - JUNGLE_CFG.FLOOR_OFFSET;
+      const table = JUNGLE_MONSTER_TABLES[jf - 1] ?? [];
+      for (const spawn of dungeon.monsterSpawns) {
+        if (spawn.x === this.player.x && spawn.y === this.player.y) continue;
+        const monsterId = pick(table);
+        if (!monsterId) continue;
+        const def = MONSTERS[monsterId];
+        // Pass jf (1-10) not the raw floor (101-110) so scaling stays sane
+        if (def) this.monsters.push(new Monster(def, spawn.x, spawn.y, jf));
+      }
+      if (floor === 110) {
+        const bossSpawn = dungeon.endPos;
+        const vantusDef = { ...MONSTERS.witchDoctor };
+        this.monsters.push(new Monster(vantusDef, bossSpawn.x, bossSpawn.y, JUNGLE_CFG.FLOORS));
+        this.events_bus.emit(EV.LOG_MSG, { text: '🥁 Drumbeats echo from the deep jungle...', color: '#ff8844' });
+      }
+      return;
+    }
+
+    // ── Forced monsters (e.g. scripted intro encounters on floor 1) ──
     for (const fm of dungeon.forcedMonsters ?? []) {
       const def = MONSTERS[fm.monsterId];
       if (def) this.monsters.push(new Monster(def, fm.x, fm.y, floor));
@@ -536,7 +584,32 @@ export class GameScene extends Phaser.Scene {
   }
 
   _spawnItems(dungeon, floor) {
-    // Forced item placements (e.g. guaranteed dagger on floor 1)
+    // ── Jungle floors 101-110 ──────────────────────────────
+    if (floor >= 101) {
+      const jf = floor - JUNGLE_CFG.FLOOR_OFFSET;
+      const tableIdx = Math.min(jf - 1, JUNGLE_ITEM_TABLES.length - 1);
+      const table = JUNGLE_ITEM_TABLES[tableIdx];
+      for (const spawn of dungeon.itemSpawns) {
+        if (spawn.x === this.player.x && spawn.y === this.player.y) continue;
+        const entry = weightedPick(table);
+        if (!entry) continue;
+        const def = ITEMS[entry.id];
+        const qty = (def?.slot || def?.singleDrop) ? 1 : rand(1, 3);
+        this.floorItems.push({ x: spawn.x, y: spawn.y, item: createItem(entry.id, qty) });
+      }
+      // Gold piles
+      const numGold = rand(2, 4);
+      for (let i = 0; i < numGold; i++) {
+        const room = pick(dungeon.rooms);
+        const gx = rand(room.x + 1, room.x + room.w - 2);
+        const gy = rand(room.y + 1, room.y + room.h - 2);
+        const amount = rand(5, 15) * jf;
+        this.floorItems.push({ x: gx, y: gy, item: { ...createItem('gold'), value: amount } });
+      }
+      return;
+    }
+
+    // ── Forced item placements (e.g. guaranteed dagger on floor 1) ──
     for (const fi of dungeon.forcedItems ?? []) {
       this.floorItems.push({ x: fi.x, y: fi.y, item: createItem(fi.itemId) });
     }
@@ -1052,6 +1125,10 @@ export class GameScene extends Phaser.Scene {
     this.player.x = nx;
     this.player.y = ny;
 
+    // Jungle passage transitions (walk-on triggers)
+    if (t === TILE.JUNGLE_EXIT)  { this._jungleAdvance();  return; }
+    if (t === TILE.JUNGLE_ENTRY) { this._jungleRetreat();  return; }
+
     // Check for adjacent NPC in town
     this._checkNPCAdjacency();
 
@@ -1200,6 +1277,10 @@ export class GameScene extends Phaser.Scene {
     if (monster.def.id === 'vantus') {
       this._onVantusDeath(monster);
     }
+    // Witch Doctor special death: reveal jungle exit
+    if (monster.def.id === 'witchDoctor') {
+      this._onWitchDoctorDeath(monster);
+    }
   }
 
   /** Called when Vantus is slain — drops Shadow Mirror and opens a one-way portal to town. */
@@ -1229,6 +1310,52 @@ export class GameScene extends Phaser.Scene {
       text: '\uD83C\uDF00 A shadow portal shimmers nearby. Step through to return to town.',
       color: '#cc88ff',
     });
+  }
+
+  /** Called when the Witch Doctor is slain — reveals the jungle exit on floor 10. */
+  _onWitchDoctorDeath(boss) {
+    this.events_bus.emit(EV.LOG_MSG, { text: '🪦 The Witch Doctor falls! The jungle falls silent.', color: '#ff8844' });
+    const { x: ex, y: ey } = this._floorEndPos;
+    if (this.grid[ey]?.[ex] !== TILE.JUNGLE_EXIT) {
+      this.grid[ey][ex] = TILE.JUNGLE_EXIT;
+      if (this.tileSprites[ey]?.[ex]) {
+        this.tileSprites[ey][ex].setTexture('tile-jungle-exit');
+      }
+    }
+    this.events_bus.emit(EV.LOG_MSG, { text: '🌿 A passage opens to the east. The jungle is yours!', color: '#44ff88' });
+  }
+
+  /** Player walks onto JUNGLE_EXIT — advance to the next jungle floor (or return to town from 110). */
+  _jungleAdvance() {
+    SFX.play('stairs-down');
+    this._saveCurrentFloor();
+    if (this.floor === 0) {
+      // Entering the jungle from town
+      this.floor = JUNGLE_CFG.FLOOR_OFFSET + 1;
+    } else if (this.floor >= 101 && this.floor < JUNGLE_CFG.FLOOR_OFFSET + JUNGLE_CFG.FLOORS) {
+      this.floor++;
+    } else if (this.floor === JUNGLE_CFG.FLOOR_OFFSET + JUNGLE_CFG.FLOORS) {
+      // Exiting after clearing floor 10 — back to town
+      this.events_bus.emit(EV.LOG_MSG, { text: '🏆 You emerge from the jungle, victorious!', color: '#ffd700' });
+      this.floor = 0;
+      this._loadFloor(0);
+      return;
+    }
+    this._loadFloor(this.floor, false);
+  }
+
+  /** Player walks onto JUNGLE_ENTRY — retreat to the previous jungle floor or back to town. */
+  _jungleRetreat() {
+    SFX.play('stairs-up');
+    this._saveCurrentFloor();
+    if (this.floor === 101) {
+      // Exit jungle back to town, placing player just outside the gate
+      this.floor = 0;
+      this._loadFloor(0, false, { x: TOWN_GATE_POS.x - 1, y: TOWN_GATE_POS.y });
+    } else {
+      this.floor--;
+      this._loadFloor(this.floor, true);
+    }
   }
 
   /** Step through the floor-10 shadow portal — one-way trip back to town. */
@@ -1337,12 +1464,12 @@ export class GameScene extends Phaser.Scene {
         this.player.equipment[slot] = null;
     }
     this.events_bus.emit(EV.STATS_CHANGED);
-    // Open the gate (only if not already open)
+    // Open the gate as a jungle entrance (only if not already open)
     const { x: gx, y: gy } = TOWN_GATE_POS;
-    if (this.grid[gy]?.[gx] !== TILE.FLOOR) {
-      this.grid[gy][gx] = TILE.FLOOR;
+    if (this.grid[gy]?.[gx] !== TILE.JUNGLE_EXIT) {
+      this.grid[gy][gx] = TILE.JUNGLE_EXIT;
       if (this.tileSprites[gy]?.[gx]) {
-        this.tileSprites[gy][gx].setTexture('tile-floor');
+        this.tileSprites[gy][gx].setTexture('tile-jungle-exit');
       }
       SFX.play('chest');
       this.events_bus.emit(EV.LOG_MSG, {
@@ -1458,8 +1585,11 @@ export class GameScene extends Phaser.Scene {
     this.grid[y][x] = TILE.CHEST_OPEN;
     this.tileSprites[y][x].setTexture('tile-chest-open');
     const numItems = rand(1, 3);
-    const tableIdx = Math.min(this.floor - 1, FLOOR_ITEM_TABLES.length - 1);
-    const table = FLOOR_ITEM_TABLES[tableIdx];
+    const isJungle = this.floor >= 101;
+    const tableIdx = isJungle
+      ? Math.min(this.floor - 101, JUNGLE_ITEM_TABLES.length - 1)
+      : Math.min(this.floor - 1, FLOOR_ITEM_TABLES.length - 1);
+    const table = isJungle ? JUNGLE_ITEM_TABLES[tableIdx] : FLOOR_ITEM_TABLES[tableIdx];
     const found = [];
     for (let i = 0; i < numItems; i++) {
       const entry = weightedPick(table);
@@ -1469,7 +1599,8 @@ export class GameScene extends Phaser.Scene {
         found.push(item.name);
       }
     }
-    const gold = rand(10, 30) * this.floor;
+    const effectiveFloor = this.floor >= 101 ? this.floor - JUNGLE_CFG.FLOOR_OFFSET : this.floor;
+    const gold = rand(10, 30) * effectiveFloor;
     this.player.gold += gold;
     this.events_bus.emit(EV.LOG_MSG, {
       text: `Chest opened! Found: ${found.join(', ')} and ${gold} gold.`,
@@ -2800,9 +2931,12 @@ export class GameScene extends Phaser.Scene {
   _onDeath() {
     Music.stop(2.0);
     this.scene.stop(SCENE.UI);
+    const displayFloor = this.floor >= 101
+      ? `Jungle ${this.floor - JUNGLE_CFG.FLOOR_OFFSET}`
+      : String(this.floor);
     this.scene.start(SCENE.GAMEOVER, {
       won: false,
-      floor: this.floor,
+      floor: displayFloor,
       level: this.player.level,
       gold: this.player.gold,
       checkpoint: this._floorCheckpoint ?? null,
@@ -2812,9 +2946,12 @@ export class GameScene extends Phaser.Scene {
   _onVictory() {
     Music.stop(2.0);
     this.scene.stop(SCENE.UI);
+    const displayFloor = this.floor >= 101
+      ? `Jungle ${this.floor - JUNGLE_CFG.FLOOR_OFFSET}`
+      : String(this.floor);
     this.scene.start(SCENE.GAMEOVER, {
       won: true,
-      floor: this.floor,
+      floor: displayFloor,
       level: this.player.level,
       gold: this.player.gold,
     });

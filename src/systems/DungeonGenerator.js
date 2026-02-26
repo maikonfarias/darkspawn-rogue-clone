@@ -411,7 +411,8 @@ export function isPassable(grid, x, y) {
   const t = grid[y][x];
   return t === TILE.FLOOR || t === TILE.DOOR || t === TILE.STAIRS_DOWN ||
          t === TILE.STAIRS_UP || t === TILE.CHEST_OPEN ||
-         t === TILE.TRAP_HIDDEN || t === TILE.TRAP_VISIBLE || t === TILE.GRASS;
+         t === TILE.TRAP_HIDDEN || t === TILE.TRAP_VISIBLE || t === TILE.GRASS ||
+         t === TILE.JUNGLE_EXIT || t === TILE.JUNGLE_ENTRY;
 }
 
 export function isWalkable(grid, x, y) {
@@ -420,5 +421,5 @@ export function isWalkable(grid, x, y) {
   const t = grid[y][x];
   return t === TILE.FLOOR || t === TILE.DOOR || t === TILE.STAIRS_DOWN ||
          t === TILE.STAIRS_UP || t === TILE.TRAP_HIDDEN || t === TILE.TRAP_VISIBLE ||
-         t === TILE.GRASS;
+         t === TILE.GRASS || t === TILE.JUNGLE_EXIT || t === TILE.JUNGLE_ENTRY;
 }

@@ -1390,7 +1390,9 @@ export class UIScene extends Phaser.Scene {
   }
 
   _refreshFloor(floor) {
-    this.floorText?.setText(floor === 0 ? 'Town' : `Floor: ${floor}`);
+    if (floor === 0)        this.floorText?.setText('Town');
+    else if (floor >= 101)  this.floorText?.setText(`Jungle: ${floor - 100}`);
+    else                    this.floorText?.setText(`Floor: ${floor}`);
   }
 
   _addLog({ text, color = '#ccddee' }) {

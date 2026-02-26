@@ -17,6 +17,7 @@ export const ITEMS = {
   warHammer:  { id:'warHammer',  name:'War Hammer',       type:ITEM_TYPE.WEAPON, slot:SLOT.WEAPON, char:'/', color:C.BROWN,   atk:13, description:'A devastating blunt weapon.',     value:110, weight:11 },
   shortBow:   { id:'shortBow',   name:'Short Bow',        type:ITEM_TYPE.WEAPON, slot:SLOT.WEAPON, char:')', color:C.BROWN,   atk:5,  ranged:true,  description:'A light bow. Fire at any visible enemy.', value:40, weight:3 },
   runicBlade: { id:'runicBlade', name:'Runic Blade',      type:ITEM_TYPE.WEAPON, slot:SLOT.WEAPON, char:'/', color:C.CYAN,    atk:15, manaBonus:5,  description:'Ancient sword etched with runes.', value:200, weight:6 },
+  tribalSpear: { id:'tribalSpear', name:'Tribal Spear',   type:ITEM_TYPE.WEAPON, slot:SLOT.WEAPON, char:'/', color:0xc87820, atk:12, description:'A jungle-crafted spear tipped with bone.', value:140, weight:6 },
 
   // ── Armor ──────────────────────────────────────────────────
   rags:       { id:'rags',       name:'Rags',            type:ITEM_TYPE.ARMOR,  slot:SLOT.ARMOR,  char:'[', color:C.BROWN,   def:0,  description:'Torn cloth offering no real protection.', value:0,   weight:1  },
@@ -25,6 +26,7 @@ export const ITEMS = {
   plateArmor: { id:'plateArmor', name:'Plate Armor',      type:ITEM_TYPE.ARMOR,  slot:SLOT.ARMOR,  char:'[', color:C.WHITE,   def:9,  description:'Heavy full plate protection.',    value:100, weight:14 },
   mageRobe:   { id:'mageRobe',   name:'Mage Robe',        type:ITEM_TYPE.ARMOR,  slot:SLOT.ARMOR,  char:'[', color:C.PURPLE,  def:1,  manaBonus:15, description:'Arcane-infused robe.',    value:70,  weight:3  },
   dragonScale: { id:'dragonScale',name:'Dragon Armor',    type:ITEM_TYPE.ARMOR,  slot:SLOT.ARMOR,  char:'[', color:C.RED,     def:12, description:'Scales of a fearsome dragon.',    value:250, weight:10 },
+  barkArmor:  { id:'barkArmor',  name:'Bark Armor',       type:ITEM_TYPE.ARMOR,  slot:SLOT.ARMOR,  char:'[', color:0x5a3a10, def:8,  description:'Hardened jungle bark woven into armour.', value:110, weight:8 },
 
   // ── Rings ──────────────────────────────────────────────────
   ironRing:   { id:'ironRing',   name:'Iron Ring',        type:ITEM_TYPE.RING,   slot:SLOT.RING,   char:'o', color:C.GRAY,    def:1,  description:'A plain iron ring.',              value:10,  weight:0  },
@@ -103,4 +105,28 @@ export const FLOOR_ITEM_TABLES = [
   [{ id:'potionHpL', weight:4 }, { id:'runicBlade', weight:1 }, { id:'dragonScale', weight:1 }, { id:'dragonEye', weight:1 }, { id:'scrollFire', weight:2 }, { id:'townScroll', weight:1 }],
   // floor 10 (boss) – unchanged
   [{ id:'potionHpL', weight:4 }, { id:'runicBlade', weight:1 }, { id:'dragonScale', weight:1 }],
+];
+
+// Weighted random item tables for jungle floors (j1–j10; index = jungleFloor-1)
+export const JUNGLE_ITEM_TABLES = [
+  // J1 — basic jungle supplies
+  [{ id:'potionHpS', weight:5 }, { id:'antidote', weight:4 }, { id:'wood', weight:3 }, { id:'bone', weight:3 }, { id:'leatherHide', weight:2 }],
+  // J2
+  [{ id:'potionHpS', weight:4 }, { id:'antidote', weight:3 }, { id:'leatherHide', weight:3 }, { id:'ironOre', weight:2 }, { id:'dagger', weight:1 }],
+  // J3
+  [{ id:'potionHpM', weight:3 }, { id:'antidote', weight:3 }, { id:'leatherArmor', weight:2 }, { id:'shortSword', weight:1 }, { id:'townScroll', weight:1 }],
+  // J4
+  [{ id:'potionHpM', weight:3 }, { id:'antidote', weight:2 }, { id:'barkArmor', weight:2 }, { id:'chainMail', weight:1 }, { id:'scrollMap', weight:1 }, { id:'townScroll', weight:1 }],
+  // J5
+  [{ id:'potionHpM', weight:3 }, { id:'potionMana', weight:2 }, { id:'tribalSpear', weight:2 }, { id:'barkArmor', weight:1 }, { id:'crystal', weight:2 }, { id:'townScroll', weight:1 }],
+  // J6
+  [{ id:'potionHpL', weight:3 }, { id:'antidote', weight:2 }, { id:'tribalSpear', weight:2 }, { id:'barkArmor', weight:2 }, { id:'gemRuby', weight:1 }, { id:'ironRing', weight:1 }, { id:'townScroll', weight:1 }],
+  // J7
+  [{ id:'potionHpL', weight:3 }, { id:'potionMana', weight:2 }, { id:'tribalSpear', weight:2 }, { id:'barkArmor', weight:1 }, { id:'crystal', weight:2 }, { id:'goldRing', weight:1 }, { id:'townScroll', weight:1 }],
+  // J8
+  [{ id:'potionHpL', weight:3 }, { id:'potionMana', weight:3 }, { id:'boneAmulet', weight:2 }, { id:'tribalSpear', weight:1 }, { id:'barkArmor', weight:1 }, { id:'gemRuby', weight:1 }, { id:'townScroll', weight:1 }],
+  // J9
+  [{ id:'potionHpL', weight:4 }, { id:'tribalSpear', weight:2 }, { id:'barkArmor', weight:1 }, { id:'moonstone', weight:1 }, { id:'dragonEye', weight:1 }, { id:'townScroll', weight:1 }],
+  // J10 (boss)
+  [{ id:'potionHpL', weight:3 }, { id:'tribalSpear', weight:2 }, { id:'barkArmor', weight:1 }],
 ];

@@ -24,6 +24,8 @@ export const TILE = Object.freeze({
   NPC:          12,
   TREE:         13,  // impassable forest tree (outside town walls)
   GATE_CLOSED:  14,  // town gate — opens when shadow mirror is delivered
+  JUNGLE_EXIT:  15,  // right-side passage out of a jungle level (east)
+  JUNGLE_ENTRY: 16,  // left-side passage back through a jungle level (west)
 });
 
 // ── FOV States ───────────────────────────────────────────────
@@ -92,6 +94,11 @@ export const EV = Object.freeze({
 });
 
 // ── Dungeon Config ───────────────────────────────────────────
+export const JUNGLE_CFG = Object.freeze({
+  FLOORS:       10,   // 10 jungle floors
+  FLOOR_OFFSET: 100,  // this.floor 101–110 = jungle floors 1–10
+});
+
 export const DUNGEON_CFG = Object.freeze({
   FLOORS:          10,
   MIN_ROOM_W:       5,

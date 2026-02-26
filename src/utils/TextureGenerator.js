@@ -308,6 +308,46 @@ function genGateClosed(scene) {
   g.destroy();
 }
 
+function genJungleExit(scene) {
+  const g = scene.make.graphics({ add: false });
+  g.fillStyle(0x1a5c08, 1); g.fillRect(0, 0, T, T);                // grass base
+  g.fillStyle(0x22aa44, 0.4); g.fillRect(10, 0, T - 10, T);         // glow halo
+  g.fillStyle(0x3a5c10, 1); g.fillRect(14, 2, 4, 28);               // left arch post
+  g.fillStyle(0x2a4408, 1); g.fillRect(14, 4, 2, 24);               // post shadow
+  g.fillStyle(0x3a5c10, 1); g.fillRect(14, 2, T - 14, 4);           // top arch bar
+  g.fillStyle(0x2c8c14, 1);                                          // leaf clusters
+  g.fillEllipse(18, 4, 10, 7); g.fillEllipse(24, 2, 9, 6); g.fillEllipse(T - 4, 4, 8, 7);
+  g.fillStyle(0x44cc2a, 1);
+  g.fillEllipse(20, 2, 6, 5); g.fillEllipse(28, 4, 6, 4);
+  g.fillStyle(0x1e7c10, 1); g.fillRect(17, 22, T - 17, 8);          // ground grass
+  g.fillStyle(0x28aa18, 1); g.fillRect(18, 23, T - 18, 5);
+  g.fillStyle(0x66ff88, 0.7);                                        // east arrow hint
+  g.fillTriangle(19, 13, 19, 19, 28, 16);
+  g.fillStyle(0xaaffcc, 0.6); g.fillRect(20, 15, 5, 2);
+  g.generateTexture('tile-jungle-exit', T, T);
+  g.destroy();
+}
+
+function genJungleEntry(scene) {
+  const g = scene.make.graphics({ add: false });
+  g.fillStyle(0x1a5c08, 1); g.fillRect(0, 0, T, T);                // grass base
+  g.fillStyle(0x22aa44, 0.3); g.fillRect(0, 0, T - 10, T);          // glow halo
+  g.fillStyle(0x3a5c10, 1); g.fillRect(T - 18, 2, 4, 28);           // right arch post
+  g.fillStyle(0x2a4408, 1); g.fillRect(T - 16, 4, 2, 24);           // post shadow
+  g.fillStyle(0x3a5c10, 1); g.fillRect(0, 2, T - 14, 4);            // top arch bar
+  g.fillStyle(0x2c8c14, 1);
+  g.fillEllipse(T - 18, 4, 10, 7); g.fillEllipse(T - 24, 2, 9, 6); g.fillEllipse(4, 4, 8, 7);
+  g.fillStyle(0x44cc2a, 1);
+  g.fillEllipse(T - 20, 2, 6, 5); g.fillEllipse(T - 28, 4, 6, 4);
+  g.fillStyle(0x1e7c10, 1); g.fillRect(0, 22, T - 17, 8);           // ground grass
+  g.fillStyle(0x28aa18, 1); g.fillRect(0, 23, T - 18, 5);
+  g.fillStyle(0x66ff88, 0.7);                                        // west arrow hint
+  g.fillTriangle(T - 19, 13, T - 19, 19, T - 28, 16);
+  g.fillStyle(0xaaffcc, 0.6); g.fillRect(T - 25, 15, 5, 2);
+  g.generateTexture('tile-jungle-entry', T, T);
+  g.destroy();
+}
+
 // ── Character Sprites (32×32) ─────────────────────────────────
 
 function genPlayer(scene) {
@@ -1198,6 +1238,325 @@ function genMonster(scene, id, cfg) {
       g.fillRect(4,  14, 1, 1); g.fillRect(27, 14, 1, 1);
       break;
     }
+
+    // ── Jungle Monsters ─────────────────────────────────────
+
+    case 'wildApe': {
+      const AK = 0x6b3c18;   // dark fur
+      const AL = 0x9b6030;   // lighter fur
+      const AS = 0x3a1c08;   // shadow fur
+      // Lower body / haunches
+      g.fillStyle(AK, 1); g.fillEllipse(16, 24, 22, 14);
+      // Arms
+      g.fillStyle(AK, 1);
+      g.fillRect(3, 14, 5, 14);   // left arm
+      g.fillRect(24, 14, 5, 14);  // right arm
+      g.fillStyle(AS, 1);
+      g.fillRect(4, 22, 3, 6);    // left knuckle shadow
+      g.fillRect(25, 22, 3, 6);   // right knuckle shadow
+      // Torso
+      g.fillStyle(AK, 1); g.fillRect(9, 12, 14, 14);
+      g.fillStyle(AL, 1); g.fillRect(11, 14, 10, 10);  // lighter chest
+      // Head
+      g.fillStyle(AK, 1); g.fillRect(9, 3, 14, 11);
+      g.fillStyle(AL, 1); g.fillRect(10, 4, 12, 8);    // face plate
+      // Brow ridge
+      g.fillStyle(AS, 1); g.fillRect(9, 8, 14, 2);
+      // Eyes
+      g.fillStyle(0xcc4400, 1);
+      g.fillRect(11, 6, 3, 2); g.fillRect(18, 6, 3, 2);
+      g.fillStyle(0xff8844, 1);
+      g.fillRect(11, 6, 1, 1); g.fillRect(18, 6, 1, 1);
+      // Snout
+      g.fillStyle(AL, 1); g.fillEllipse(16, 12, 8, 5);
+      g.fillStyle(AS, 1); g.fillRect(14, 11, 2, 2); g.fillRect(16, 11, 2, 2);
+      break;
+    }
+
+    case 'giantMosquito': {
+      const MK = 0x3a1a6a;   // dark purple body
+      const ML = 0x6a3aaa;   // light purple
+      const MW = 0x88ccff;   // wing translucent blue
+      // Wings (behind body)
+      g.fillStyle(MW, 0.6);
+      g.fillEllipse(8,  12, 18, 7);   // left wing upper
+      g.fillEllipse(8,  18, 14, 5);   // left wing lower
+      g.fillEllipse(24, 12, 18, 7);   // right wing upper
+      g.fillEllipse(24, 18, 14, 5);   // right wing lower
+      // Abdomen (segmented)
+      g.fillStyle(MK, 1); g.fillEllipse(16, 22, 12, 8);
+      g.fillStyle(ML, 1); g.fillRect(11, 20, 10, 2);
+      g.fillStyle(MK, 1); g.fillRect(11, 22, 10, 2);
+      g.fillStyle(ML, 1); g.fillRect(11, 24, 10, 2);
+      // Thorax
+      g.fillStyle(MK, 1); g.fillEllipse(16, 15, 10, 8);
+      // Head
+      g.fillStyle(MK, 1); g.fillEllipse(16, 9, 8, 7);
+      // Compound eyes
+      g.fillStyle(0xcc3388, 1);
+      g.fillCircle(13, 8, 3); g.fillCircle(19, 8, 3);
+      g.fillStyle(0xff66bb, 1);
+      g.fillRect(12, 7, 1, 1); g.fillRect(18, 7, 1, 1);
+      // Proboscis (long needle)
+      g.fillStyle(MK, 1); g.fillRect(15, 12, 2, 16);
+      g.fillStyle(0xcc4466, 1); g.fillRect(15, 26, 2, 2);
+      // Legs
+      g.fillStyle(MK, 1);
+      g.fillRect(10, 15, 1, 8); g.fillRect(8,  15, 1, 6);
+      g.fillRect(22, 15, 1, 8); g.fillRect(24, 15, 1, 6);
+      break;
+    }
+
+    case 'poisonSnake': {
+      const SK = 0x1e7008;   // body green
+      const SL = 0x3aaa14;   // highlight
+      const SY = 0xcccc20;   // belly yellow-green
+      // Body — S-curve
+      g.fillStyle(SK, 1);
+      g.fillEllipse(20, 6,  10, 6);   // upper coil right
+      g.fillRect(15, 3, 10, 6);
+      g.fillEllipse(12, 10, 10, 6);   // upper coil left
+      g.fillRect(8,  10, 10, 5);
+      g.fillEllipse(14, 18, 12, 6);   // middle right
+      g.fillRect(10, 16, 12, 5);
+      g.fillEllipse(9,  24, 10, 6);   // lower coil
+      g.fillRect(5,  22, 10, 5);
+      g.fillEllipse(10, 29, 8, 5);    // tail
+      // Belly pattern (lighter contrasting stripe)
+      g.fillStyle(SY, 1);
+      g.fillRect(17, 4, 6, 4);
+      g.fillRect(10, 11, 6, 3);
+      g.fillRect(13, 17, 7, 4);
+      g.fillRect(7,  23, 5, 3);
+      // Highlight
+      g.fillStyle(SL, 1);
+      g.fillRect(19, 3, 3, 2);
+      g.fillRect(11, 10, 3, 2);
+      // Head
+      g.fillStyle(SK, 1); g.fillEllipse(26, 5, 12, 7);
+      g.fillStyle(SL, 1); g.fillRect(22, 3, 9, 4);
+      // Tongue
+      g.fillStyle(0xdd1122, 1);
+      g.fillRect(29, 6, 3, 1);
+      g.fillRect(29, 7, 1, 2); g.fillRect(31, 7, 1, 2);
+      // Eyes
+      g.fillStyle(0xffee00, 1); g.fillRect(24, 3, 2, 2);
+      g.fillStyle(0x222200, 1); g.fillRect(24, 3, 1, 1);
+      break;
+    }
+
+    case 'tribalHunter': {
+      const TS = 0xc8895a;   // skin
+      const TT = 0x7a4c28;   // tribal brown outfit
+      const TR = 0xcc3311;   // tribal red marking
+      // Legs
+      g.fillStyle(TT, 1);
+      g.fillRect(9, 20, 5, 10); g.fillRect(18, 20, 5, 10);
+      // Feet
+      g.fillStyle(0x3a2008, 1);
+      g.fillRect(8, 28, 6, 3); g.fillRect(18, 28, 6, 3);
+      // Torso — loincloth/vest
+      g.fillStyle(TT, 1); g.fillRect(8, 11, 16, 11);
+      // Tribal markings on chest
+      g.fillStyle(TR, 1);
+      g.fillRect(12, 13, 2, 6); g.fillRect(16, 13, 2, 6);
+      g.fillRect(10, 15, 2, 2); g.fillRect(20, 15, 2, 2);
+      // Arms (bare skin)
+      g.fillStyle(TS, 1);
+      g.fillRect(4, 11, 5, 8); g.fillRect(23, 11, 5, 8);
+      // Arm bands
+      g.fillStyle(TR, 1);
+      g.fillRect(4, 14, 5, 2); g.fillRect(23, 14, 5, 2);
+      // Neck + head
+      g.fillStyle(TS, 1); g.fillRect(13, 8, 6, 4);
+      g.fillRect(10, 2, 12, 10);
+      // Face markings
+      g.fillStyle(TR, 1);
+      g.fillRect(10, 5, 2, 3); g.fillRect(20, 5, 2, 3);
+      // Hair (feathered)
+      g.fillStyle(0x1a0a00, 1); g.fillRect(9, 2, 14, 4);
+      g.fillStyle(0xcc8800, 1);
+      g.fillRect(9, 0, 2, 4); g.fillRect(13, 0, 2, 4); g.fillRect(17, 0, 2, 4); g.fillRect(21, 0, 2, 4);
+      // Eyes
+      g.fillStyle(0x1a0a00, 1);
+      g.fillRect(12, 6, 3, 2); g.fillRect(17, 6, 3, 2);
+      // Spear (held)
+      g.fillStyle(0x8b5a22, 1); g.fillRect(27, 2, 2, 28);
+      g.fillStyle(0xeeddcc, 1); g.fillRect(26, 2, 3, 4);  // bone tip
+      break;
+    }
+
+    case 'beetle': {
+      const BK = 0x1a3a08;   // dark carapace
+      const BL = 0x2a6012;   // lighter carapace
+      const BS = 0x0c1c04;   // shadow / seam
+      const BA = 0x4a8820;   // amber sheen
+      // Total body — very wide and armored
+      g.fillStyle(BK, 1); g.fillEllipse(16, 18, 28, 22);
+      // Carapace segments
+      g.fillStyle(BL, 1); g.fillEllipse(16, 15, 24, 16);
+      g.fillStyle(BK, 1); g.fillRect(14, 8, 4, 18);   // elytral seam
+      // Wing covers (elytra)
+      g.fillStyle(BL, 1); g.fillEllipse(10, 16, 12, 16);
+      g.fillStyle(BL, 1); g.fillEllipse(22, 16, 12, 16);
+      // Amber highlight spots
+      g.fillStyle(BA, 1);
+      g.fillRect(8,  12, 3, 3); g.fillRect(21, 12, 3, 3);
+      g.fillRect(10, 19, 2, 2); g.fillRect(20, 19, 2, 2);
+      // Seams / ridges
+      g.fillStyle(BS, 1);
+      g.fillRect(6, 14, 10, 1); g.fillRect(16, 14, 10, 1);
+      g.fillRect(6, 18, 10, 1); g.fillRect(16, 18, 10, 1);
+      // Head
+      g.fillStyle(BK, 1); g.fillEllipse(16, 8, 14, 9);
+      g.fillStyle(BK, 1); g.fillRect(13, 4, 6, 4); // horn base
+      g.fillStyle(BS, 1); g.fillRect(14, 2, 2, 4);  // left horn
+      g.fillRect(16, 2, 2, 4);  // right horn
+      g.fillStyle(BA, 1); g.fillRect(14, 2, 1, 1); g.fillRect(16, 2, 1, 1);
+      // Eyes
+      g.fillStyle(0xdd8800, 1); g.fillRect(11, 7, 3, 2); g.fillRect(18, 7, 3, 2);
+      // Legs (3 per side)
+      g.fillStyle(BK, 1);
+      g.fillRect(3, 14, 5, 2); g.fillRect(1, 16, 6, 2); g.fillRect(2, 19, 5, 2);
+      g.fillRect(24, 14, 5, 2); g.fillRect(25, 16, 6, 2); g.fillRect(25, 19, 5, 2);
+      break;
+    }
+
+    case 'mandrake': {
+      const MG = 0x1a6608;   // dark green plant
+      const ML2 = 0x2a9914;  // light green
+      const MR = 0x5a2808;   // root brown
+      // Roots / feet
+      g.fillStyle(MR, 1);
+      g.fillRect(9, 25, 3, 7);  g.fillRect(13, 27, 3, 5);
+      g.fillRect(16, 26, 3, 6); g.fillRect(20, 24, 3, 8);
+      // Gnarled root detail
+      g.fillStyle(0x3a1804, 1);
+      g.fillRect(9, 28, 2, 1); g.fillRect(20, 27, 2, 1);
+      // Bulbous body
+      g.fillStyle(MG, 1); g.fillEllipse(16, 19, 20, 16);
+      g.fillStyle(ML2, 1); g.fillEllipse(14, 17, 14, 11);
+      // Leaf crown
+      g.fillStyle(MG, 1);
+      g.fillEllipse(10, 8,  9, 12);   // left leaf
+      g.fillEllipse(22, 8,  9, 12);   // right leaf
+      g.fillEllipse(16, 5,  8, 12);   // centre leaf top
+      g.fillStyle(ML2, 1);
+      g.fillRect(9,  7, 2, 8);   // left leaf vein
+      g.fillRect(21, 7, 2, 8);   // right vein
+      g.fillRect(15, 4, 2, 8);   // centre vein
+      // Face (screaming mouth)
+      g.fillStyle(0xffd080, 1); g.fillEllipse(16, 18, 12, 9); // face
+      g.fillStyle(0x1a0800, 1); g.fillEllipse(16, 20, 8, 5);  // open mouth
+      g.fillStyle(0xffffff, 1);
+      g.fillRect(13, 19, 2, 2); g.fillRect(17, 19, 2, 2);     // teeth
+      // Eyes (angry)
+      g.fillStyle(0xdd2200, 1); g.fillRect(12, 15, 3, 2); g.fillRect(17, 15, 3, 2);
+      g.fillStyle(0xff6644, 1); g.fillRect(12, 15, 1, 1); g.fillRect(17, 15, 1, 1);
+      break;
+    }
+
+    case 'deadTree': {
+      const DK = 0x2c1e0e;   // dead bark dark
+      const DL = 0x4a3220;   // bark lighter
+      const DS = 0x180e04;   // deep shadow
+      // Trunk (wide base, narrow top)
+      g.fillStyle(DK, 1);
+      g.fillRect(10, 18, 12, 14);  // base
+      g.fillRect(11, 10, 10, 10);  // mid trunk
+      g.fillRect(13, 4,   6, 8);   // upper trunk
+      // Bark texture lines
+      g.fillStyle(DS, 1);
+      g.fillRect(12, 19, 1, 12); g.fillRect(15, 21, 1, 10); g.fillRect(18, 20, 1, 11);
+      g.fillRect(13, 11, 1, 8);  g.fillRect(17, 12, 1, 7);
+      g.fillStyle(DL, 1);
+      g.fillRect(11, 20, 1, 10); g.fillRect(14, 22, 1, 9); g.fillRect(19, 21, 1, 9);
+      // Gnarled branches
+      g.fillStyle(DK, 1);
+      g.fillRect(3, 10, 11, 3);   // large left branch
+      g.fillRect(3, 8,  3, 5);    // left branch tip
+      g.fillRect(18, 9, 10, 3);   // large right branch
+      g.fillRect(25, 7, 3, 5);    // right branch tip
+      g.fillRect(5,  14, 8, 2);   // lower left twig
+      g.fillRect(19, 12, 8, 2);   // lower right twig
+      // Scraggly dead twigs on tips
+      g.fillStyle(DS, 1);
+      g.fillRect(1, 8, 3, 1); g.fillRect(2, 7, 1, 3);
+      g.fillRect(27, 6, 3, 1); g.fillRect(28, 5, 1, 3);
+      // Exposed roots
+      g.fillStyle(DK, 1);
+      g.fillRect(5, 29, 7, 2); g.fillRect(2, 30, 6, 2);
+      g.fillRect(20, 29, 7, 2); g.fillRect(24, 30, 5, 2);
+      // Eerie hollow eyes in the bark
+      g.fillStyle(0x440c00, 1); g.fillRect(13, 14, 3, 2); g.fillRect(17, 13, 3, 2);
+      g.fillStyle(0x993300, 1); g.fillRect(13, 14, 1, 1); g.fillRect(17, 13, 1, 1);
+      break;
+    }
+
+    case 'witchDoctor': {
+      const WS = 0x8c5a2c;   // dark skin
+      const WR = 0xcc3300;   // red ochre marking
+      const WB = 0x1a0c00;   // bone / dark
+      const WG = 0x22aa44;   // ritual green glow
+      // Legs / wrap
+      g.fillStyle(0x3a1c08, 1);
+      g.fillRect(9, 20, 5, 10); g.fillRect(18, 20, 5, 10);
+      g.fillStyle(WR, 1); g.fillRect(8, 22, 16, 2);  // wrap band
+      // Hex-marked skirt / lower robes
+      g.fillStyle(0x1a0800, 1); g.fillRect(7, 19, 18, 6);
+      g.fillStyle(WR, 1);
+      g.fillRect(9, 20, 2, 4); g.fillRect(14, 20, 2, 4); g.fillRect(19, 20, 2, 4);
+      // Torso — bare skin with body paint
+      g.fillStyle(WS, 1); g.fillRect(8, 11, 16, 10);
+      g.fillStyle(WR, 1);
+      g.fillRect(14, 12, 4, 8);   // vertical stripe
+      g.fillRect(9, 15, 14, 2);   // horizontal stripe
+      g.fillStyle(WG, 1);
+      g.fillRect(12, 13, 2, 2); g.fillRect(18, 13, 2, 2); // painted triangles
+      // Arms
+      g.fillStyle(WS, 1); g.fillRect(3, 11, 6, 9); g.fillRect(23, 11, 6, 9);
+      // Bracelets
+      g.fillStyle(WB, 1); g.fillRect(3, 14, 6, 2); g.fillRect(23, 14, 6, 2);
+      g.fillStyle(0xccaa22, 1); g.fillRect(3, 14, 6, 1); g.fillRect(23, 14, 6, 1);
+      // Hand with staff
+      g.fillStyle(WS, 1); g.fillRect(1, 18, 3, 3);
+      g.fillStyle(0x6b3a10, 1); g.fillRect(0, 2, 2, 28);  // staff
+      g.fillStyle(WB, 1); g.fillRect(0, 2, 3, 4);         // skull atop staff
+      g.fillStyle(0xffffcc, 1); g.fillRect(0, 2, 2, 3);
+      g.fillStyle(WG, 1); g.fillRect(0, 5, 3, 1);         // green glow at staff base
+      // Neck
+      g.fillStyle(WS, 1); g.fillRect(13, 8, 6, 4);
+      // Head — masked
+      g.fillStyle(WS, 1); g.fillRect(10, 2, 12, 10);
+      // Ritual mask covering face
+      g.fillStyle(WB, 1); g.fillRect(9, 3, 14, 8);
+      g.fillStyle(WR, 1);
+      g.fillRect(10, 4, 12, 1);  // mask top stripe
+      g.fillRect(9, 8, 14, 1);   // mask brow stripe
+      // Mask eyes — bright glowing green
+      g.fillStyle(WG, 1);
+      g.fillRect(10, 5, 4, 3); g.fillRect(17, 5, 4, 3);
+      g.fillStyle(0x88ffcc, 1);
+      g.fillRect(11, 5, 2, 2); g.fillRect(18, 5, 2, 2);
+      // Bone necklace
+      g.fillStyle(WB, 1); g.fillRect(10, 10, 12, 2);
+      g.fillStyle(0xddddbb, 1);
+      g.fillRect(11, 10, 2, 2); g.fillRect(14, 10, 2, 2);
+      g.fillRect(17, 10, 2, 2); g.fillRect(20, 10, 2, 2);
+      // Headdress feathers
+      g.fillStyle(0xcc8800, 1);
+      g.fillRect(8, 0,  2, 4); g.fillRect(11, 0, 2, 3);
+      g.fillRect(19, 0, 2, 3); g.fillRect(22, 0, 2, 4);
+      g.fillStyle(WR, 1);
+      g.fillRect(14, 0, 2, 5); g.fillRect(16, 0, 2, 5);
+      // Aura glow (scattered pixels around figure)
+      g.fillStyle(WG, 0.6);
+      g.fillRect(6,  11, 1, 1); g.fillRect(25, 11, 1, 1);
+      g.fillRect(5,  18, 1, 1); g.fillRect(26, 18, 1, 1);
+      g.fillRect(7,   5, 1, 1); g.fillRect(24,  5, 1, 1);
+      g.fillRect(7,  28, 1, 1); g.fillRect(24, 28, 1, 1);
+      break;
+    }
   }
 
   g.generateTexture(`monster-${id}`, T, T);
@@ -1493,7 +1852,6 @@ function genItemTextures(scene) {
     g.fillRect(8, 7, 2, 4); g.fillRect(7, 8, 4, 2);
   });
 
-  // dragonScale — red, scaly pattern
   genItem('dragonScale', g => {
     g.fillStyle(0x771111, 1); g.fillRect(3, 3, 18, 18);
     g.fillStyle(0x993333, 1);
@@ -1512,6 +1870,47 @@ function genItemTextures(scene) {
     }
     g.fillStyle(0xbb1111, 1); g.fillRect(2, 3, 3, 4); g.fillRect(19, 3, 3, 4); // spikes
     g.fillStyle(0xdd3333, 1); g.fillRect(2, 3, 2, 2); g.fillRect(20, 3, 2, 2);
+  });
+
+  // tribalSpear — bone-tipped wooden shaft
+  genItem('tribalSpear', g => {
+    // Bone tip
+    g.fillStyle(0xeeddbb, 1); g.fillRect(10, 2, 4, 5);
+    g.fillStyle(0xfff0cc, 1); g.fillRect(10, 2, 2, 3);
+    g.fillStyle(0xaa9977, 1); g.fillRect(9, 6, 6, 2);
+    // Lashing / binding
+    g.fillStyle(0x6b3808, 1); g.fillRect(10, 7, 4, 3);
+    g.fillStyle(0x3a1c04, 1); g.fillRect(10, 8, 4, 1);
+    // Shaft
+    g.fillStyle(0x8b5a22, 1); g.fillRect(11, 9, 2, 13);
+    g.fillStyle(0xaa7030, 1); g.fillRect(11, 9, 1, 13);
+    // Butt end
+    g.fillStyle(0x6b3808, 1); g.fillRect(10, 21, 4, 2);
+    g.fillStyle(0x3a1c04, 1); g.fillRect(11, 22, 2, 1);
+  });
+
+  // barkArmor — layered jungle bark plates
+  genItem('barkArmor', g => {
+    // Background plate
+    g.fillStyle(0x4a2808, 1); g.fillRect(3, 4, 18, 17);
+    // Bark layers
+    g.fillStyle(0x7a4c1a, 1); g.fillRect(4, 5, 16, 5);
+    g.fillStyle(0x5a3410, 1); g.fillRect(4, 9, 16, 5);
+    g.fillStyle(0x7a4c1a, 1); g.fillRect(4, 13, 16, 5);
+    g.fillStyle(0x5a3410, 1); g.fillRect(4, 17, 16, 4);
+    // Bark grain lines
+    g.fillStyle(0x3a1c08, 1);
+    g.fillRect(5,  5, 1, 14); g.fillRect(9,  5, 1, 14);
+    g.fillRect(13, 5, 1, 14); g.fillRect(17, 5, 1, 14);
+    // Shoulder spikes (vine lashed bark horns)
+    g.fillStyle(0x4a2808, 1);
+    g.fillRect(2, 4, 3, 6); g.fillRect(19, 4, 3, 6);
+    g.fillStyle(0x7a4c1a, 1); g.fillRect(2, 4, 2, 4); g.fillRect(20, 4, 2, 4);
+    // Vine lashing
+    g.fillStyle(0x2c6c08, 1);
+    g.fillRect(3, 9, 18, 1); g.fillRect(3, 13, 18, 1); g.fillRect(3, 17, 18, 1);
+    // Highlight edges
+    g.fillStyle(0xaa7a32, 1); g.fillRect(4, 5, 16, 1); g.fillRect(4, 9, 16, 1); g.fillRect(4, 13, 16, 1);
   });
 
   // ─── POTIONS ─────────────────────────────────────────────────
@@ -1944,6 +2343,8 @@ export function generateAllTextures(scene) {
   genGrass(scene);
   genTree(scene);
   genGateClosed(scene);
+  genJungleExit(scene);
+  genJungleEntry(scene);
   genNPC(scene);
   genDoor(scene);
   genStairsDown(scene);
@@ -2119,4 +2520,6 @@ export const TILE_TEXTURE = {
   '12': 'tile-npc',
   '13': 'tile-tree',
   '14': 'tile-gate-closed',
+  '15': 'tile-jungle-exit',
+  '16': 'tile-jungle-entry',
 };

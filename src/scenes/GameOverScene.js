@@ -188,7 +188,7 @@ export class GameOverScene extends Phaser.Scene {
       }).setOrigin(0.5);
 
     this.add.text(W / 2, H / 2 + 50, [
-      `Reached Floor:  ${floor} / 10`,
+      `Reached Floor:  ${floor}`,
       `Final Level:    ${level}`,
       `Gold Collected: ${gold}`,
     ].join('\n'), {

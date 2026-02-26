@@ -550,6 +550,13 @@ export const Music = new ProceduralMusicEngine();
 /** Helper: pick the right dungeon theme based on floor number. */
 export function themeForFloor(floor) {
   if (floor === 0)  return 'town';
+  if (floor >= 101) {
+    // Jungle floors: 101-110 (jungleFloor 1-10)
+    const jf = floor - 100;
+    if (jf <= 3) return 'shallow';
+    if (jf <= 7) return 'mid';
+    return 'deep';
+  }
   if (floor <= 3)   return 'shallow';
   if (floor <= 7)   return 'mid';
   return 'deep';
