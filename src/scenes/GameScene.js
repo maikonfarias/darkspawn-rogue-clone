@@ -50,6 +50,47 @@ const TARGETABLE_SKILLS = new Set(['magicBolt', 'fireball', 'shadowStep', 'death
 // ── Panel states ─────────────────────────────────────────────
 const PANEL = { NONE: 0, INVENTORY: 1, SKILLS: 2, CRAFTING: 3, CHAR: 4 };
 
+// ── ASCII Mode: tile character + colour mapping ───────────────
+// Characters match classic Rogue/NetHack conventions.
+const ASCII_TILE_MAP = {
+  '-1': { ch: ' ',  col: '#000000' },  // void
+  '0':  { ch: '#',  col: '#7a8a9a' },  // wall
+  '1':  { ch: '.',  col: '#3a3a3a' },  // floor
+  '2':  { ch: '+',  col: '#cc8833' },  // door
+  '3':  { ch: '>',  col: '#ffffff' },  // stairs down
+  '4':  { ch: '<',  col: '#ffffff' },  // stairs up
+  '5':  { ch: '~',  col: '#4488ff' },  // water
+  '6':  { ch: '~',  col: '#ff5500' },  // lava
+  '7':  { ch: '$',  col: '#ffdd00' },  // chest closed
+  '8':  { ch: '_',  col: '#887700' },  // chest open
+  '9':  { ch: '.',  col: '#3a3a3a' },  // trap hidden (looks like floor)
+  '10': { ch: '^',  col: '#ff3333' },  // trap visible
+  '11': { ch: '"',  col: '#44aa44' },  // grass
+  '12': { ch: '@',  col: '#00ffff' },  // NPC
+  '13': { ch: 'T',  col: '#226622' },  // tree
+  '14': { ch: '|',  col: '#888888' },  // gate closed
+  '15': { ch: '>',  col: '#88ff88' },  // jungle exit
+  '16': { ch: '<',  col: '#88ff88' },  // jungle entry
+};
+
+// ASCII Mode: item-type → character + colour
+const ASCII_ITEM_MAP = {
+  weapon:   { ch: '/',  col: '#aaaaff' },
+  armor:    { ch: '[',  col: '#44cccc' },
+  ring:     { ch: '=',  col: '#00ff88' },
+  amulet:   { ch: '"',  col: '#8888ff' },
+  potion:   { ch: '!',  col: '#ff55ff' },
+  scroll:   { ch: '?',  col: '#eeeeee' },
+  material: { ch: '*',  col: '#aaaaaa' },
+  gold:     { ch: '$',  col: '#ffdd00' },
+  quest:    { ch: '&',  col: '#00ff44' },
+};
+
+/** Convert a Phaser/numeric hex colour (0xrrggbb) to a CSS hex string. */
+function numToHex(n) {
+  return '#' + (n & 0xFFFFFF).toString(16).padStart(6, '0');
+}
+
 export class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: SCENE.GAME });
@@ -84,6 +125,12 @@ export class GameScene extends Phaser.Scene {
     this._portalSprite = null;  // Phaser Image for the blue portal visual
     this._shadowPortal       = null;  // { x, y } — shadow portal tile on floor 10 after Vantus
     this._shadowPortalSprite = null;  // Phaser Image for the shadow portal visual
+
+    // ASCII display mode (toggled with M key)
+    this._asciiMode        = false;
+    this._asciiTileLayer   = null;
+    this._asciiEntityLayer = null;
+    this._modeToast        = null;
 
     this._setupInput();
 
@@ -382,10 +429,13 @@ export class GameScene extends Phaser.Scene {
 
   _loadFloor(floorNum, fromBelow = false, posOverride = null) {
     // Clear previous floor
-    if (this.tileLayer)    this.tileLayer.destroy();
-    if (this.itemLayer)    this.itemLayer.destroy();
-    if (this.entityLayer)  this.entityLayer.destroy();
-    if (this.fogLayer)     this.fogLayer.destroy();
+    if (this.tileLayer)   this.tileLayer.destroy();
+    if (this.floorLayer)  this.floorLayer.destroy();
+    if (this.itemLayer)   this.itemLayer.destroy();
+    if (this.entityLayer) this.entityLayer.destroy();
+    if (this.fogLayer)    this.fogLayer.destroy();
+    // ASCII tile Text objects are PERMANENT (created once, reused across floors).
+    // Only the entity layer (monsters/items) is rebuilt per floor — handled below.
     if (this.overlayPanel) this.overlayPanel.destroy();
     if (this._pathGraphics) { this._pathGraphics.destroy(); this._pathGraphics = null; }
     if (this._statusIconGraphics) this._statusIconGraphics.clear();
@@ -722,6 +772,121 @@ export class GameScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 3,
       backgroundColor: null,
     }).setOrigin(0.5, 1).setDepth(28).setVisible(false);
+
+    // If ASCII mode is active, refresh tile chars and rebuild entity glyphs.
+    // Otherwise skip entirely — the layer is built lazily on first toggle.
+    if (this._asciiMode) {
+      this._refreshAsciiTiles();    // O(n) property updates on existing Text objects
+      this._rebuildAsciiEntities(); // recreate monster/item glyphs (small count)
+      this.tileLayer?.setVisible(false);
+      this.floorLayer?.setVisible(false);
+      this.itemLayer?.setVisible(false);
+      this.entityLayer?.setVisible(false);
+    }
+  }
+
+  /**
+   * Called ONCE ever (first M-key press). Creates the permanent 4 000-cell tile
+   * Text grid plus the entity container. Never destroys or recreates them;
+   * use _refreshAsciiTiles() on floor changes instead.
+   */
+  _buildAsciiLayer() {
+    const fontCfg = { fontFamily: 'Courier New', fontSize: '24px', fontStyle: 'bold' };
+
+    // Permanent tile Text grid — positions are fixed for the life of the session.
+    this._asciiTileLayer = this.add.container(0, 0).setDepth(5);
+    this._asciiTileTexts = [];
+    for (let y = 0; y < MAP_H; y++) {
+      this._asciiTileTexts[y] = [];
+      for (let x = 0; x < MAP_W; x++) {
+        const t    = this.grid[y][x];
+        const info = ASCII_TILE_MAP[String(t)] ?? ASCII_TILE_MAP['1'];
+        const txt  = this.add.text(
+          x * T + T / 2, y * T + T / 2, info.ch,
+          { ...fontCfg, color: info.col }
+        ).setOrigin(0.5, 0.5).setVisible(false);
+        this._asciiTileLayer.add(txt);
+        this._asciiTileTexts[y][x] = txt;
+      }
+    }
+
+    // Entity layer — container persists, but its children are rebuilt per floor.
+    this._asciiEntityLayer = this.add.container(0, 0).setDepth(12);
+
+    // Player '@' — permanent child, repositioned each render.
+    this._asciiPlayerText = this.add.text(
+      this.player.x * T + T / 2, this.player.y * T + T / 2, '@',
+      { ...fontCfg, color: '#ffff44' }
+    ).setOrigin(0.5, 0.5).setVisible(false);
+    this._asciiEntityLayer.add(this._asciiPlayerText);
+
+    // Populate monster/item glyphs for the current floor.
+    this._rebuildAsciiEntities();
+
+    // Visible immediately (called only when switching on for the first time).
+    this._asciiTileLayer.setVisible(true);
+    this._asciiEntityLayer.setVisible(true);
+  }
+
+  /**
+   * Cheap O(n) refresh: update char + colour on the existing permanent Text
+   * objects to reflect a newly loaded floor. No allocation, no canvas creation.
+   * Positions never change so we skip setPosition entirely.
+   */
+  _refreshAsciiTiles() {
+    if (!this._asciiTileTexts) return;
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) {
+        const txt  = this._asciiTileTexts[y]?.[x];
+        if (!txt) continue;
+        const info = ASCII_TILE_MAP[String(this.grid[y][x])] ?? ASCII_TILE_MAP['1'];
+        // setText + setColor only redraw the internal canvas when the value changes,
+        // so repeated calls with the same value are cheap.
+        txt.setText(info.ch).setColor(info.col).setAlpha(1).setVisible(false);
+      }
+    }
+  }
+
+  _rebuildAsciiEntities() {
+    // Clear previous monster / item texts from the entity layer
+    if (this._asciiMonsterTexts) {
+      for (const [, txt] of this._asciiMonsterTexts) txt.destroy();
+    }
+    if (this._asciiItemTexts) {
+      for (const [, txt] of this._asciiItemTexts) txt.destroy();
+    }
+    this._asciiMonsterTexts = new Map();
+    this._asciiItemTexts    = new Map();
+
+    if (!this._asciiEntityLayer) return;
+
+    const fontCfg = { fontFamily: 'Courier New', fontSize: '24px', fontStyle: 'bold' };
+
+    // Monster texts — use char/color already defined in MonsterData
+    for (const m of this.monsters ?? []) {
+      if (m.isDead) continue;
+      const def = MONSTERS[m.id];
+      const ch  = def?.char ?? 'M';
+      const col = (typeof def?.color === 'number') ? numToHex(def.color)
+                : (def?.color ?? '#ff4444');
+      const txt = this.add.text(
+        m.x * T + T / 2, m.y * T + T / 2, ch,
+        { ...fontCfg, color: col }
+      ).setOrigin(0.5, 0.5).setVisible(false);
+      this._asciiEntityLayer.add(txt);
+      this._asciiMonsterTexts.set(m, txt);
+    }
+
+    // Item texts — use item type to pick classic Rogue glyph
+    for (const fi of this.floorItems ?? []) {
+      const info = ASCII_ITEM_MAP[fi.item.type] ?? ASCII_ITEM_MAP.material;
+      const txt  = this.add.text(
+        fi.x * T + T / 2, fi.y * T + T / 2, info.ch,
+        { ...fontCfg, color: info.col }
+      ).setOrigin(0.5, 0.5).setVisible(false);
+      this._asciiEntityLayer.add(txt);
+      this._asciiItemTexts.set(fi, txt);
+    }
   }
 
   _buildFogLayer() {
@@ -937,6 +1102,117 @@ export class GameScene extends Phaser.Scene {
     this.entityLayer.setDepth(10);
     this.fogLayer.setDepth(20);
     if (this.overlayPanel) this.overlayPanel.setDepth(30);
+
+    // ── ASCII mode render ────────────────────────────────────
+    // Tile char/colour is already set by _buildAsciiLayer / _refreshAsciiTiles.
+    // _render() only updates visibility and alpha (cheap — no canvas redraws).
+    if (this._asciiMode && this._asciiTileTexts) {
+      for (let y = 0; y < MAP_H; y++) {
+        for (let x = 0; x < MAP_W; x++) {
+          const txt = this._asciiTileTexts[y]?.[x];
+          if (!txt) continue;
+          const v = this.vis[y][x];
+          if (v === VIS.HIDDEN) {
+            txt.setVisible(false);
+          } else if (v === VIS.EXPLORED) {
+            txt.setAlpha(0.30).setVisible(true);
+          } else {
+            txt.setAlpha(1).setVisible(true);
+          }
+        }
+      }
+
+      // Player glyph
+      if (this._asciiPlayerText) {
+        this._asciiPlayerText
+          .setPosition(this.player.x * T + T / 2, this.player.y * T + T / 2)
+          .setVisible(true);
+      }
+
+      // Monster glyphs
+      if (this._asciiMonsterTexts) {
+        for (const m of this.monsters) {
+          const txt = this._asciiMonsterTexts.get(m);
+          if (!txt) continue;
+          if (m.isDead) { txt.setVisible(false); continue; }
+          const visible = this.vis[m.y][m.x] === VIS.VISIBLE;
+          txt.setPosition(m.x * T + T / 2, m.y * T + T / 2).setVisible(visible);
+        }
+      }
+
+      // Item glyphs
+      if (this._asciiItemTexts) {
+        for (const fi of this.floorItems) {
+          const txt = this._asciiItemTexts.get(fi);
+          if (!txt) continue;
+          txt.setVisible(this.vis[fi.y][fi.x] === VIS.VISIBLE);
+        }
+      }
+    }
+  }
+
+  // ── ASCII Mode ────────────────────────────────────────────
+
+  _toggleAsciiMode() {
+    this._asciiMode = !this._asciiMode;
+    const on = this._asciiMode;
+
+    if (on) {
+      // First activation ever: allocate the permanent tile Text grid
+      if (!this._asciiTileLayer) {
+        this._buildAsciiLayer(); // creates objects AND sets visible(true)
+      } else {
+        // Already built: just refresh tile chars for the current floor and show
+        this._refreshAsciiTiles();
+        this._rebuildAsciiEntities();
+        this._asciiTileLayer.setVisible(true);
+        this._asciiEntityLayer.setVisible(true);
+      }
+      this.tileLayer?.setVisible(false);
+      this.floorLayer?.setVisible(false);
+      this.itemLayer?.setVisible(false);
+      this.entityLayer?.setVisible(false);
+    } else {
+      this._asciiTileLayer?.setVisible(false);
+      this._asciiEntityLayer?.setVisible(false);
+      this.tileLayer?.setVisible(true);
+      this.floorLayer?.setVisible(true);
+      this.itemLayer?.setVisible(true);
+      this.entityLayer?.setVisible(true);
+    }
+
+    // Re-render immediately so FOV / positions are correct
+    this._render();
+
+    // HUD toast
+    this._showModeToast(on ? '[ ASCII Mode: ON  ]' : '[ ASCII Mode: OFF ]');
+  }
+
+  _showModeToast(msg) {
+    // Destroy any previous toast
+    if (this._modeToast) { this._modeToast.destroy(); this._modeToast = null; }
+    const cam = this.cameras.main;
+    const sx  = cam.worldView.centerX;
+    const sy  = cam.worldView.y + 48;
+    this._modeToast = this.add.text(sx, sy, msg, {
+      fontFamily: 'Courier New',
+      fontSize:   '16px',
+      color:      '#ffff88',
+      stroke:     '#000000',
+      strokeThickness: 3,
+      backgroundColor: '#00000099',
+      padding: { x: 10, y: 5 },
+    }).setOrigin(0.5, 0).setDepth(50).setAlpha(1);
+
+    // Fade out after 1.5 s
+    this.tweens.add({
+      targets:  this._modeToast,
+      alpha:    0,
+      delay:    900,
+      duration: 600,
+      ease:     'Sine.easeIn',
+      onComplete: () => { this._modeToast?.destroy(); this._modeToast = null; },
+    });
   }
 
   // ── Input ────────────────────────────────────────────────
@@ -1059,8 +1335,9 @@ export class GameScene extends Phaser.Scene {
       case 'KeyI': this._openPanel(PANEL.INVENTORY); break;
       case 'KeyK': this._openPanel(PANEL.SKILLS);    break;
       case 'KeyC': this._openPanel(PANEL.CRAFTING);  break;
-      case 'KeyP': this._openPanel(PANEL.CHAR);                    break;
-      case 'Escape': this.events_bus.emit(EV.PAUSE_GAME);            break;
+      case 'KeyP': this._openPanel(PANEL.CHAR);      break;
+      case 'KeyM': this._toggleAsciiMode();          break;  // toggle ASCII / sprite mode
+      case 'Escape': this.events_bus.emit(EV.PAUSE_GAME);   break;
     }
 
     // Stairs

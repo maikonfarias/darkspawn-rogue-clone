@@ -81,8 +81,8 @@ export class UIScene extends Phaser.Scene {
     this._invSelectedSlot       = -1;
     this._invSelectedEquipSlot  = null;
 
-    // Toggle minimap with M key
-    this.input.keyboard.on('keydown-M', () => this._toggleMinimap());
+    // Toggle minimap with N key (M is used for ASCII mode toggle)
+    this.input.keyboard.on('keydown-N', () => this._toggleMinimap());
     // Skill hotkeys 1–8 — only main-row digit keys, NOT numpad
     // (numpad digits are reserved for movement / classic roguelike controls)
     this.input.keyboard.on('keydown', (event) => {
